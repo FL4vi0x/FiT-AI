@@ -202,3 +202,6 @@ Voz (STT/TTS/wake word), App Launcher, interface gráfica própria, ferramentas 
 - Comportamento da GPU integrada (Vulkan) e do consumo de RAM com `num_ctx` maior.
 - Hardware do carro e K-line/PIDs reais do Fit continuam desconhecidos (fora desta PoC).
 - Qwen3 8B "pensa" por padrão (latência e tokens de raciocínio): usar `think: false` e medir o efeito.
+
+## 11. Resultado do P3 (2026-11-16)
+Os dois modelos aprovados foram baixados e verificados (tags `qwen3:4b-instruct-2507-q4_K_M` e `qwen3:8b-q4_K_M`, integridade por hash recalculado, licença Apache-2.0, ambos carregam em CPU, geram JSON conforme esquema e emitem `tool_calls` reconhecido). `think:false` foi respeitado no 8B (o padrão produz raciocínio longo). Detalhes, digests, desempenho preliminar e ressalvas em `poc-03-p3-model-validation.md`. As decisões desta especificação não foram alteradas; P4 não foi iniciado.
