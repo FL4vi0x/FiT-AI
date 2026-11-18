@@ -6,3 +6,9 @@ __pycache__/
 htmlcov/
 *.log
 bench/results/
+# local assistant data (memory / audit databases and SQLite sidecar files)
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+runtime/
