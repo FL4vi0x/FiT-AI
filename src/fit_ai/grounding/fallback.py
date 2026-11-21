@@ -41,6 +41,22 @@ def _origin_prefix(simulated: bool | None) -> str:
     return "Leitura (a fonte não informou se é simulada ou real): "
 
 
+def render_status(bundle: EvidenceBundle) -> str:
+    """The connection state of the data source, from the status evidence only (never claims a real car)."""
+    ok = [e for e in bundle.status if e.state == "ok"]
+    if not ok:
+        return "Não consegui consultar o estado da conexão com a fonte de dados agora."
+    ev = ok[-1]
+    if ev.link_state != "connected":
+        text = "A fonte de dados responde, mas a conexão com o veículo (ou com o simulador) está interrompida."
+    else:
+        text = "A fonte de dados do veículo está conectada"
+        text += {True: " e funciona em modo simulado (os dados vêm de um simulador).",
+                 False: " ao veículo.",
+                 None: " (a fonte não informou se é simulada ou real)."}[ev.simulated]
+    return text
+
+
 def render_unavailable_info() -> str:
     return "Essa informação não está disponível para mim agora, e não vou estimar um valor."
 
@@ -49,7 +65,7 @@ def render_fallback(bundle: EvidenceBundle, requested: Sequence[str] = ()) -> st
     """A safe answer from the evidence alone. `requested`: sensor fields the user asked about (empty = all)."""
     fields = [f for f in SENSOR_FIELDS if not requested or f in requested]
     if not bundle.telemetry:
-        return render_unavailable_info()
+        return render_status(bundle) if bundle.status else render_unavailable_info()
 
     if not bundle.has_usable_reading:
         if bundle.stale is not None:

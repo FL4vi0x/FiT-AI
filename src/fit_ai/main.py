@@ -8,15 +8,33 @@ from fastapi import FastAPI
 
 from fit_ai import __version__
 from fit_ai.adapters.octave import OctaveProvider
+from fit_ai.api.chat_routes import install_chat_error_handlers
+from fit_ai.api.chat_routes import router as chat_router
 from fit_ai.api.routes import router, telemetry_error_handler
-from fit_ai.api.security import HostGuard
+from fit_ai.api.security import BrowserGuard, HostGuard, RequestContext
 from fit_ai.config import ConfigError, Settings
+from fit_ai.conversation.config import ChatSettings
+from fit_ai.conversation.factory import ChatRuntime, build_chat_runtime
+from fit_ai.conversation.service import ConversationService
 from fit_ai.domain.telemetry import TelemetryError, TelemetryProvider
 from fit_ai.services.telemetry import TelemetryService
 
+log = logging.getLogger("fit_ai")
 
-def create_app(provider: TelemetryProvider | None = None, settings: Settings | None = None) -> FastAPI:
-    """Build the app. Pass a `provider` to replace OCTAVE (tests, other sources)."""
+
+def create_app(
+    provider: TelemetryProvider | None = None,
+    settings: Settings | None = None,
+    conversation_service: ConversationService | None = None,
+    chat_settings: ChatSettings | None = None,
+) -> FastAPI:
+    """Build the app. Pass a `provider` to replace OCTAVE (tests, other sources).
+
+    Chat: pass a `conversation_service` to use your own; when the real OCTAVE provider is used (no `provider`
+    given) the production chat is wired automatically. Injecting only a `provider` does NOT create any
+    database or model client, so tests stay hermetic. If chat cannot be set up, `POST /api/v1/chat` answers 503
+    `chat_unavailable` and everything else keeps working."""
+    production = provider is None
     if provider is None:
         settings = settings or Settings.from_env()
         provider = OctaveProvider(
@@ -26,17 +44,40 @@ def create_app(provider: TelemetryProvider | None = None, settings: Settings | N
             sdk_path=settings.octave_sdk_path,
         )
 
+    chat_ok = True
+    if chat_settings is None:
+        try:
+            chat_settings = ChatSettings.from_env()
+        except ConfigError as exc:
+            log.error("invalid chat settings, chat is disabled and the strict defaults apply: %s", exc)
+            chat_settings, chat_ok = ChatSettings(), False
+
+    telemetry_service = TelemetryService(provider)
+    runtime: ChatRuntime | None = None
+    if conversation_service is None and production and chat_ok:
+        runtime = build_chat_runtime(telemetry_service, chat_settings)
+        conversation_service = runtime.service if runtime else None
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         yield
+        if runtime is not None:
+            await runtime.close()
         close = getattr(provider, "aclose", None)
         if close is not None:
             await close()
 
     app = FastAPI(title="Fit AI Core", version=__version__, lifespan=lifespan)
-    app.state.telemetry_service = TelemetryService(provider)
+    app.state.telemetry_service = telemetry_service
+    app.state.conversation_service = conversation_service
     app.add_exception_handler(TelemetryError, telemetry_error_handler)
+    install_chat_error_handlers(app)
     app.include_router(router)
+    app.include_router(chat_router)
+    # innermost first; HostGuard is outermost so a bad Host is refused before anything else looks at the request
+    app.add_middleware(BrowserGuard, allowed_origins=chat_settings.allowed_origins,
+                       max_body_bytes=chat_settings.max_body_bytes)
+    app.add_middleware(RequestContext)
     app.add_middleware(HostGuard)  # DNS-rebinding protection: only local Host headers are served
     return app
 

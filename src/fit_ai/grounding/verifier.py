@@ -64,6 +64,8 @@ _JUDGMENT = frozenset({
     "caindo", "acelerada", "acelerado", "lenta", "lento", "regular", "tranquila", "tranquilo", "critica", "critico",
     "segura", "seguro", "bem", "mal", "funcionando", "problema", "problemas", "defeito", "falha",
     "tudo"})
+_PRESENT_STATE = frozenset({"esta", "estao", "seu", "sua", "seus", "suas", "meu", "minha", "meus", "minhas", "atual", "agora",
+                            "momento", "hoje", "marca", "marcando", "indica", "indicando", "apresenta", "mostra", "voce", "tem"})
 _UNSUPPORTED_NOUNS = frozenset({"pneu", "pneus", "pressao", "combustivel", "tanque", "oleo", "bateria", "tensao",
                                 "freio", "freios", "consumo", "odometro", "hodometro", "quilometragem", "gasolina",
                                 "etanol", "airbag", "abs", "nivel", "farol", "farois", "porta", "portas"})
@@ -100,8 +102,11 @@ _EN_WORDS = frozenset({"the", "is", "are", "at", "and", "of", "to", "you", "your
 _PT_WORDS = frozenset({"a", "o", "as", "os", "de", "do", "da", "e", "em", "no", "na", "que", "um", "uma", "para", "com",
                        "por", "esta", "estao", "nao", "voce", "motor", "simulado", "leitura", "agora", "ao", "se"})
 _SIM_MARK = re.compile(r"\bsimulad[oa]s?\b|\bsimulacao\b|\bsimulador\b|\bsimulando\b")
-_REAL_CLAIM = re.compile(r"\b(?:dados|leitura|leituras|valor|valores|medicao|medicoes)\s+reais?\b|\bdo carro real\b|"
-                         r"\bdo veiculo real\b")
+_REAL_CLAIM = re.compile(
+    r"\b(?:dados|leitura|leituras|valor|valores|medicao|medicoes)\s+reais?\b|"
+    r"\b(?:ao|com o|no|do|de|pelo|para o|num)\s+(?:meu\s+|seu\s+|o\s+)?(?:carro|veiculo|automovel|honda fit|fit)\s+(?:real|de verdade)\b|"
+    r"\b(?:carro|veiculo)\s+(?:real|de verdade)\b|\bcarro fisico\b|\bveiculo fisico\b|\bobd (?:real|fisico)\b|"
+    r"\becu (?:real|fisica)\b")
 
 
 def _norm_unit(u: str) -> str | None:
@@ -129,6 +134,7 @@ class Verifier:
         mentions = extract_mentions(answer.answer)
         states = self._state_claims(answer.answer)
         tele_in_text = any(m.field is not None for m in mentions) or bool(states)
+        strict = bool(b.telemetry or b.status)  # the turn read the vehicle: judgment rules apply without exception
         wants_values = bool(answer.claims) or tele_in_text or any(
             m for m in mentions if not (m.benign or m.year_like))
 
@@ -186,9 +192,13 @@ class Verifier:
             words = {t.text for t in c_toks}
             if _DENIAL.search(c_txt):
                 continue
-            if words & _TELEMETRY_TERMS and words & _JUDGMENT:
+            # On a turn that read the vehicle these rules are strict. On a tool-less (general-knowledge) turn they only
+            # apply to clauses about the car's PRESENT state, so "a troca de óleo mantém a lubrificação adequada do
+            # motor" is a definition, not a claim about this car (found by the P7 run with the real model).
+            applies = strict or bool(words & _PRESENT_STATE)
+            if applies and words & _TELEMETRY_TERMS and words & _JUDGMENT:
                 add("unverifiable_judgment", "judgment about sensor values: no approved thresholds exist")
-            if words & _UNSUPPORTED_NOUNS and words & _STATE_WORDS:
+            if applies and words & _UNSUPPORTED_NOUNS and words & _STATE_WORDS:
                 add("unsupported_sensor_claim", "statement about a sensor this system does not have")
 
         # ── temporal attribution: readings describe NOW, never the past ──
@@ -229,8 +239,11 @@ class Verifier:
         shows_value = bool(verified) or tele_in_text or bool(answer.claims)
         if shows_value and b.simulated is True and not _SIM_MARK.search(norm):
             add("simulation_not_disclosed", "readings are simulated but the answer does not say so")
-        if b.simulated is True and _REAL_CLAIM.search(norm) and not _NEG_BEFORE.search(norm):
-            add("simulation_misrepresented", "simulated readings presented as real")
+        if b.simulated is True:
+            for m in _REAL_CLAIM.finditer(norm):  # negation must be LOCAL ("não são do carro real"), not anywhere
+                if not _NEG_BEFORE.search(norm[max(0, m.start() - 24):m.start()]):
+                    add("simulation_misrepresented", "simulated readings presented as real")
+                    break
         if shows_value and b.simulated is False and _SIM_MARK.search(norm):
             add("simulation_misrepresented", "real readings presented as simulated")
 

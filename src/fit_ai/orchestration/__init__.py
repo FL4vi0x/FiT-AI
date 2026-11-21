@@ -11,9 +11,10 @@ from fit_ai.orchestration.turn import (
     AssistantOrchestrator,
     TurnRequest,
     TurnResult,
+    history_text,
 )
 
 __all__ = [
     "AUDIT_REFUSAL", "AssistantOrchestrator", "AssistantSettings", "CONTROL_REFUSAL", "HISTORY_PLACEHOLDER",
-    "Intent", "TurnRequest", "TurnResult", "classify",
+    "Intent", "TurnRequest", "TurnResult", "classify", "history_text",
 ]

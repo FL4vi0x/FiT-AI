@@ -127,13 +127,23 @@ def test_foundation_layers_only_depend_downward():
     assert ups <= {"fit_ai.tools.contracts"}, ups
 
 
-def test_the_core_does_not_import_the_assistant_layers():
-    for f in ("main.py", "config.py"):
+def test_the_telemetry_core_does_not_know_the_assistant_layers():
+    """P7 wires the chat in on purpose, but only through `fit_ai.conversation`: the Core's configuration and its
+    telemetry routes/security know nothing about memory, tools, grounding, orchestration or audit, and the chat
+    route lives in ONE file."""
+    layers = ("fit_ai.memory", "fit_ai.tools", "fit_ai.grounding", "fit_ai.orchestration", "fit_ai.audit")
+    for f in ("main.py", "config.py"):  # main.py reaches the assistant only through fit_ai.conversation
         text = (SRC / f).read_text(encoding="utf-8")
-        assert not any(x in text for x in ("fit_ai.memory", "fit_ai.tools", "fit_ai.grounding", "fit_ai.orchestration",
-                                            "fit_ai.audit"))
-    api = " ".join(p.read_text(encoding="utf-8") for p in (SRC / "api").glob("*.py"))
-    assert "orchestration" not in api and "/api/v1/chat" not in api  # no public chat endpoint in P6
+        assert not any(x in text for x in layers), f
+    assert "fit_ai.conversation" not in (SRC / "config.py").read_text(encoding="utf-8")
+    for f in ("routes.py", "security.py"):  # telemetry routes and the request guards are chat-agnostic
+        text = (SRC / "api" / f).read_text(encoding="utf-8")
+        assert not any(x in text for x in layers + ("fit_ai.conversation", "orchestration")), f
+    chat_refs = [p.name for p in SRC.rglob("*.py") if "/api/v1/chat" in p.read_text(encoding="utf-8")]
+    # the route itself, the guard's body-path default, and the factory docstring: nothing else may know the path
+    assert sorted(chat_refs) == ["chat_routes.py", "main.py", "security.py"], chat_refs
+    chat_routes = (SRC / "api" / "chat_routes.py").read_text(encoding="utf-8")
+    assert not any(x in chat_routes for x in layers)  # the route talks to ConversationService only
 
 
 def test_no_executable_or_network_primitives_in_the_assistant_layers():

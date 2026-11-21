@@ -13,7 +13,7 @@ from fit_ai.grounding.fallback import format_number
 RULES_PT = """REGRAS DE RESPOSTA (obrigatórias):
 - Responda SOMENTE com um objeto JSON: {"answer": "...", "claims": [{"field": "rpm|speed_kmh|coolant_temp_c", "value": número, "unit": "rpm|km/h|°C"}], "unknown": []}.
 - Valores de sensores: use SOMENTE os de "LEITURAS DESTE TURNO", com os mesmos números e unidades. Nunca estime nem use números da pergunta ou da memória como se fossem leituras.
-- Se "simuladas=sim", COMECE a resposta com "No simulador," (ou "Dados simulados:") e use a palavra "simulado"/"simulador". Se um valor faltar ou as leituras estiverem indisponíveis, diga que não está disponível.
+- Se "simuladas=sim", COMECE SEMPRE a resposta com "No simulador," (ou "Dados simulados:") e use a palavra "simulado"/"simulador", mesmo quando algum sensor estiver em "ausentes". Se um valor faltar ou as leituras estiverem indisponíveis, diga que não está disponível.
 - Em "claims" coloque SOMENTE campos que aparecem com valor em LEITURAS DESTE TURNO. Para um campo ausente ou indisponível, não crie claim: escreva-o em "unknown" e diga no texto que não está disponível.
 - Não opine sobre os valores (normal, alta, baixa, perigosa): apenas informe-os.
 - Você só lê dados. Nunca diga que controla, acelera, liga ou desliga algo no veículo.
@@ -62,3 +62,23 @@ def correction_message(codes: tuple[str, ...]) -> ChatMessage:
     return ChatMessage.user(
         "Sua resposta foi rejeitada pelo verificador (" + ", ".join(codes) + "). Responda de novo apenas com o JSON, "
         "usando somente as LEITURAS DESTE TURNO e sem opinar sobre os valores.")
+
+
+_SHINGLE = 6
+_shingles: frozenset[tuple[str, ...]] | None = None
+
+
+def _words(text: str) -> list[str]:
+    from fit_ai.grounding.numbers import normalise
+    return [w for w in normalise(text).split() if w]
+
+
+def leaks_prompt(text: str) -> bool:
+    """True when `text` repeats six consecutive words of the (static) system message: the model is reciting
+    its internal instructions. Checked by code on every answer, whatever the model was asked."""
+    global _shingles
+    if _shingles is None:
+        w = _words(system_message().content)
+        _shingles = frozenset(tuple(w[i:i + _SHINGLE]) for i in range(len(w) - _SHINGLE + 1))
+    t = _words(text)
+    return any(tuple(t[i:i + _SHINGLE]) in _shingles for i in range(len(t) - _SHINGLE + 1))

@@ -39,7 +39,7 @@ from fit_ai.memory import ContextRetriever, MemoryError_, MemoryStore
 from fit_ai.memory.models import MemoryHit
 from fit_ai.orchestration.config import AssistantSettings
 from fit_ai.orchestration.intent import MEMORY_TOOL, Intent, classify
-from fit_ai.orchestration.prompt import correction_message, system_message, user_message
+from fit_ai.orchestration.prompt import correction_message, leaks_prompt, system_message, user_message
 from fit_ai.tools import ToolOutcome, ToolRegistry
 
 log = logging.getLogger("fit_ai.orchestration")
@@ -56,7 +56,9 @@ MAX_REQUEST_CHARS = 2000
 @dataclass(frozen=True)
 class TurnRequest:
     text: str
-    conversation_id: str | None = None
+    conversation_id: str | None = None  # an EXISTING conversation: used to recall its recent turns
+    persist: bool = True  # False: the caller (ConversationService) persists the exchange itself
+    request_id: str | None = None  # the caller's (server-generated) id, so audit records match the HTTP response
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,12 @@ class TurnResult:
     memory_error: bool = False
     timings_ms: dict[str, float] = field(default_factory=dict)
     first_raw: str | None = field(default=None, repr=False, compare=False)  # first model answer text (evaluation only)
+
+
+def history_text(answer: str, bundle: EvidenceBundle) -> str:
+    """What an assistant answer looks like in the stored history: a turn that used telemetry never keeps its
+    values (they are temporary, and old readings must not be mistaken for the current state)."""
+    return HISTORY_PLACEHOLDER if bundle.telemetry or bundle.status else answer
 
 
 class _AuditBlocked(Exception):
@@ -104,7 +112,7 @@ class AssistantOrchestrator:
     # ───────────────────────── public ─────────────────────────
     async def run(self, request: TurnRequest) -> TurnResult:
         t0 = time.perf_counter()
-        request_id, turn_id = uuid.uuid4().hex, uuid.uuid4().hex
+        request_id, turn_id = request.request_id or uuid.uuid4().hex, uuid.uuid4().hex
         text = request.text.strip()[:MAX_REQUEST_CHARS]
         intent = classify(text)
         bundle = EvidenceBundle(turn_id, self._settings.telemetry_max_age_s)
@@ -221,6 +229,8 @@ class AssistantOrchestrator:
                     parsed = parse_structured(resp.content)
                     verdict = verify(parsed, ctx.bundle)
                     codes = verdict.codes
+                    if not codes and leaks_prompt(parsed.answer):  # reciting the internal instructions
+                        codes = ("prompt_leak",)
                 except ResponseFormatError as exc:
                     codes = (exc.code,)
             verify_ms += (time.perf_counter() - t_v) * 1000
@@ -258,12 +268,11 @@ class AssistantOrchestrator:
         return text
 
     def _persist(self, request: TurnRequest, text: str, res: TurnResult, ctx: "_Ctx") -> TurnResult:
-        if self._memory is None or request.conversation_id is None:
+        if self._memory is None or request.conversation_id is None or not request.persist:
             return res
-        stored = HISTORY_PLACEHOLDER if ctx.bundle.telemetry or ctx.bundle.status else res.answer
+        stored = history_text(res.answer, ctx.bundle)
         try:
-            self._memory.add_turn(request.conversation_id, "user", text)
-            self._memory.add_turn(request.conversation_id, "assistant", stored)
+            self._memory.record_exchange(request.conversation_id, text, stored)  # atomic: both turns or none
         except MemoryError_:
             log.exception("could not persist the turn")
             return replace(res, memory_error=True)

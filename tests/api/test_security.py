@@ -129,6 +129,7 @@ def test_exposed_surface_is_exactly_the_reviewed_one():
         ("/health", "GET"),
         ("/api/v1/vehicle/telemetry", "GET"),
         ("/api/v1/vehicle/status", "GET"),
+        ("/api/v1/chat", "POST"),  # P7: the only state-changing route; guarded by BrowserGuard + HostGuard
     }
     # framework-provided documentation routes (read-only, no data); anything else registered directly is a surprise
     direct = {r.path for r in app.routes if hasattr(r, "methods")}

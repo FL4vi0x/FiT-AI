@@ -345,7 +345,7 @@ async def test_memory_failure_does_not_break_the_answer(rig, monkeypatch):
 
     def boom(*a, **k):
         raise MemoryStorageError("disk")
-    monkeypatch.setattr(r.memory, "add_turn", boom)
+    monkeypatch.setattr(r.memory, "record_exchange", boom)
     res = await r.ask("Qual a rotação?", conv.id)
     assert res.source == "llm" and res.memory_error is True
 

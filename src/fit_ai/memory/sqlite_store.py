@@ -235,15 +235,55 @@ class SqliteMemoryStore:
                         (t.id, conversation_id, role, content, _fmt(now), _fmt(expires) if expires else None))
             self._fts_put(con, "turn", t.id, content, conversation_id)
             con.execute("UPDATE conversations SET updated_at=? WHERE id=?", (_fmt(now), conversation_id))
-            old = con.execute("SELECT id FROM turns WHERE conversation_id=? ORDER BY created_at DESC, rowid DESC "
-                              "LIMIT -1 OFFSET ?", (conversation_id, self._max_turns)).fetchall()
-            for (tid,) in old:
-                con.execute("DELETE FROM turns WHERE id=?", (tid,))
-                self._fts_drop(con, "turn", tid)
-                dropped += 1
+            dropped = self._trim_conversation(con, conversation_id)
         if dropped:
             self._scrub()
         return t
+
+    def _trim_conversation(self, con: sqlite3.Connection, conversation_id: str) -> int:
+        """Drop the oldest turns beyond the per-conversation cap (inside the caller's transaction)."""
+        old = con.execute("SELECT id FROM turns WHERE conversation_id=? ORDER BY created_at DESC, rowid DESC "
+                          "LIMIT -1 OFFSET ?", (conversation_id, self._max_turns)).fetchall()
+        for (tid,) in old:
+            con.execute("DELETE FROM turns WHERE id=?", (tid,))
+            self._fts_drop(con, "turn", tid)
+        return len(old)
+
+    def record_exchange(self, conversation_id: str | None, user_content: str,
+                        assistant_content: str) -> tuple[Conversation, ConversationTurn, ConversationTurn]:
+        """Persist ONE user/assistant exchange atomically: both turns or neither. With `conversation_id=None`
+        the conversation is created in the same transaction, so a failure never leaves an empty conversation
+        or a user turn without its answer."""
+        now = self._now()
+        expires = now + timedelta(days=self._retention) if self._retention else None
+        cid = conversation_id or _new_id()
+        try:
+            turns = [ConversationTurn(id=_new_id(), conversation_id=cid, role=role, content=text, created_at=now,
+                                      expires_at=expires)
+                     for role, text in (("user", user_content), ("assistant", assistant_content))]
+        except ValidationError as exc:
+            raise MemoryPolicyError(f"invalid turn: {exc.errors()[0]['msg']}") from None
+        if "\x00" in user_content or "\x00" in assistant_content:
+            raise MemoryPolicyError("content must not contain NUL characters")
+        dropped = 0
+        with self._tx() as con:
+            exists = con.execute("SELECT created_at FROM conversations WHERE id=?", (cid,)).fetchone()
+            if conversation_id is None:
+                con.execute("INSERT INTO conversations VALUES (?,?,?,?)", (cid, None, _fmt(now), _fmt(now)))
+                created = now
+            elif exists is None:
+                raise MemoryNotFound("conversation not found")
+            else:
+                created = _parse(exists["created_at"])
+            for t in turns:
+                con.execute("INSERT INTO turns VALUES (?,?,?,?,?,?)",
+                            (t.id, cid, t.role, t.content, _fmt(now), _fmt(expires) if expires else None))
+                self._fts_put(con, "turn", t.id, t.content, cid)
+            con.execute("UPDATE conversations SET updated_at=? WHERE id=?", (_fmt(now), cid))
+            dropped = self._trim_conversation(con, cid)
+        if dropped:
+            self._scrub()
+        return Conversation(id=cid, title=None, created_at=created, updated_at=now), turns[0], turns[1]
 
     def recent_turns(self, conversation_id: str, limit: int = 6) -> list[ConversationTurn]:
         """Oldest-first, only this conversation, expired turns invisible."""

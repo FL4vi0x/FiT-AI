@@ -118,7 +118,12 @@ class EvidenceBundle:
 
     @property
     def simulated(self) -> bool | None:
+        """Whether the data of this turn is simulated. Telemetry decides; a status-only turn uses the status
+        evidence (the answer may still claim a connection to a real car or to a simulator)."""
         ev = self._latest_usable() or (self.telemetry[-1] if self.telemetry else None)
+        if ev is None:
+            ok = [e for e in self.status if e.state == "ok"]
+            ev = ok[-1] if ok else None
         return None if ev is None else ev.simulated
 
     @property

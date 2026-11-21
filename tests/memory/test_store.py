@@ -284,3 +284,56 @@ def test_recall_with_nothing_relevant_injects_no_facts(store):
     store.remember_fact("gosto de jazz")
     ctx = ContextRetriever(store).recall("qual a rotação do motor?")
     assert ctx.facts == () and ctx.empty
+
+
+# ───────── atomic exchange (P7) ─────────
+def test_record_exchange_creates_conversation_and_both_turns_together(store):
+    conv, u, a = store.record_exchange(None, "Qual a rotação?", "[resposta]")
+    assert conv.id == u.conversation_id == a.conversation_id
+    assert [(t.role, t.content) for t in store.recent_turns(conv.id, 10)] == [("user", "Qual a rotação?"), ("assistant", "[resposta]")]
+    conv2, _, _ = store.record_exchange(conv.id, "E agora?", "ok")
+    assert conv2.id == conv.id and len(store.recent_turns(conv.id, 10)) == 4  # order kept: user, assistant, user, assistant
+    assert [t.role for t in store.recent_turns(conv.id, 10)] == ["user", "assistant", "user", "assistant"]
+
+
+def test_record_exchange_is_all_or_nothing(store, monkeypatch):
+    c = store.create_conversation()
+    calls = {"n": 0}
+    real = store._fts_put
+
+    def flaky(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 2:  # the assistant turn's index write fails after the user turn was inserted
+            raise RuntimeError("index failure")
+        return real(*a, **k)
+    monkeypatch.setattr(store, "_fts_put", flaky)
+    with pytest.raises(RuntimeError):
+        store.record_exchange(c.id, "pergunta", "resposta")
+    monkeypatch.undo()
+    assert store.recent_turns(c.id, 10) == []  # no half exchange
+
+
+def test_record_exchange_new_conversation_leaves_no_empty_conversation_on_failure(store, monkeypatch):
+    monkeypatch.setattr(store, "_fts_put", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(RuntimeError):
+        store.record_exchange(None, "pergunta", "resposta")
+    monkeypatch.undo()
+    assert store.list_conversations() == []
+
+
+def test_record_exchange_validation_and_unknown_conversation(store):
+    with pytest.raises(MemoryNotFound):
+        store.record_exchange("nope", "a", "b")
+    with pytest.raises(MemoryPolicyError):
+        store.record_exchange(None, "a" * 9000, "b")
+    with pytest.raises(MemoryPolicyError):
+        store.record_exchange(None, "a", "b" + chr(0))
+    assert store.list_conversations() == []
+
+
+def test_record_exchange_respects_the_turn_cap(tmp_path):
+    s = SqliteMemoryStore(tmp_path / "cap.db", max_turns_per_conversation=4)
+    conv, _, _ = s.record_exchange(None, "u0", "a0")
+    for i in range(1, 4):
+        s.record_exchange(conv.id, f"u{i}", f"a{i}")
+    assert [t.content for t in s.recent_turns(conv.id, 10)] == ["u2", "a2", "u3", "a3"]

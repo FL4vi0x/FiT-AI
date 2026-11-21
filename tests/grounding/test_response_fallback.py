@@ -136,3 +136,22 @@ def test_fallback_with_only_status_evidence_does_not_pretend_to_have_values():
 def test_a_stale_and_a_fresh_reading_in_one_turn_use_the_fresh_one():
     b = bundle(telemetry_outcome(900, age_s=60, run_id="old"), telemetry_outcome(800, age_s=0.2, run_id="new"))
     assert b.value("rpm") == 800 and "800" in render_fallback(b) and "900" not in render_fallback(b)
+
+
+# ───────── status-only turns ─────────
+@pytest.mark.parametrize("state", ["connected", "vehicle_link_down"])
+@pytest.mark.parametrize("sim", [True, False, None])
+def test_status_fallback_is_verified_and_never_claims_a_real_car_for_a_simulator(state, sim):
+    b = bundle(status_outcome(state=state, simulated=sim))
+    t = render_fallback(b)
+    assert verify(ans(t), b).passed, t
+    if sim is True and state == "connected":
+        assert "simulado" in t and "carro real" not in t
+    if state == "vehicle_link_down":
+        assert "interrompida" in t
+
+
+def test_status_fallback_when_the_status_tool_itself_failed():
+    b = bundle(telemetry_outcome(ok=False, error_code="octave_unavailable", name="get_vehicle_status"))
+    t = render_fallback(b)
+    assert "Não consegui consultar" in t and verify(ans(t), b).passed
