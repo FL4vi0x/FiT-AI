@@ -112,15 +112,35 @@ class OllamaProvider:
         self._s = settings
         self._defaults = RequestDefaults(settings.timeout_s, settings.max_tokens, settings.think)
         self._owns_client = client is None
-        self._client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.timeout_s, connect=5.0),
+        self._client = client or self._new_client()
+        self._client_loop: asyncio.AbstractEventLoop | None = None  # the loop that owns `_client`'s connections
+        self._gate = asyncio.Semaphore(1)
+        self._closed = False
+
+    def _new_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(self._s.timeout_s, connect=5.0),
             follow_redirects=False,
             trust_env=False,
             limits=httpx.Limits(max_connections=2, max_keepalive_connections=1),
             headers={"User-Agent": "fit-ai"},
         )
-        self._gate = asyncio.Semaphore(1)
-        self._closed = False
+
+    def _client_for_running_loop(self) -> httpx.AsyncClient:
+        """A pooled connection belongs to the event loop that opened it. Reusing it from another loop stalls until the
+        timeout or fails with "Event loop is closed" (found in the P7 benchmark harness, which served each request
+        from a new loop). The app itself runs on one loop and never changes client; an injected client is the
+        caller's business. When the loop changes, the old connections are dropped (they cannot be closed from here)
+        and a fresh client is used."""
+        if not self._owns_client:
+            return self._client
+        loop = asyncio.get_running_loop()
+        if self._client_loop is None:
+            self._client_loop = loop
+        elif loop is not self._client_loop:
+            self._client = self._new_client()
+            self._client_loop = loop
+        return self._client
 
     # ── contract ──────────────────────────────────────────────────────────────────────────────
 
@@ -139,7 +159,10 @@ class OllamaProvider:
             return
         self._closed = True
         if self._owns_client:
-            await self._client.aclose()
+            try:
+                await self._client.aclose()
+            except RuntimeError:
+                pass  # its connections belong to a loop that is already closed (see _client_for_running_loop)
 
     async def generate(
         self,
@@ -236,7 +259,7 @@ class OllamaProvider:
 
     async def _request(self, method: str, path: str, body: dict[str, Any] | None, timeout_s: float) -> Any:
         try:
-            resp = await self._client.request(
+            resp = await self._client_for_running_loop().request(
                 method,
                 self._base + path,
                 json=body,

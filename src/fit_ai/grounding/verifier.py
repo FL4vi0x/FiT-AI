@@ -22,11 +22,13 @@ from dataclasses import dataclass, field
 
 from fit_ai.grounding.evidence import CANONICAL_UNIT, SENSOR_FIELDS, EvidenceBundle
 from fit_ai.grounding.numbers import (
+    Tok,
     clauses,
     orphan_units,
     extract_mentions,
     matches,
     normalise,
+    tokenize,
 )
 from fit_ai.grounding.response import StructuredAnswer
 
@@ -54,7 +56,7 @@ _UNIT_ALIASES = {"rpm": "rpm", "km/h": "km/h", "kmh": "km/h", "°c": "°C", "ºc
 _TELEMETRY_TERMS = frozenset({"rotacao", "rotacoes", "rpm", "giro", "giros", "velocidade", "kmh", "temperatura",
                               "arrefecimento", "graus", "celsius", "parado", "parada", "movimento", "motor",
                               "superaquecendo", "superaquecimento", "superaquecido", "superaquecida",
-                              "esquentando", "esquentou", "aquecendo"})
+                              "esquentando", "esquentou", "aquecendo", "carro", "veiculo", "automovel"})
 _JUDGMENT = frozenset({
     "normal", "normais", "anormal", "anormais", "alta", "alto", "altas", "altos", "baixa", "baixo", "baixas",
     "baixos", "elevada", "elevado", "elevadas", "elevados", "excessiva", "excessivo", "superaquecendo",
@@ -63,9 +65,30 @@ _JUDGMENT = frozenset({
     "otimo", "perigosa", "perigoso", "preocupante", "estavel", "instavel", "constante", "oscilando", "subindo",
     "caindo", "acelerada", "acelerado", "lenta", "lento", "regular", "tranquila", "tranquilo", "critica", "critico",
     "segura", "seguro", "bem", "mal", "funcionando", "problema", "problemas", "defeito", "falha",
-    "tudo"})
+    "tudo", "normalmente", "boas", "bons", "otimas", "otimos", "saudaveis", "fraca", "fraco", "fracas", "fracos",
+    "ligado", "ligada", "ligados", "desligado", "desligada", "condicoes", "vermelho", "vermelha"})
+# Words that make a clause a statement about THIS car's state (present, aspect, copula, speculation). On a turn that
+# read no vehicle data a clause carrying any of them is judged like on a turn that did.
 _PRESENT_STATE = frozenset({"esta", "estao", "seu", "sua", "seus", "suas", "meu", "minha", "meus", "minhas", "atual", "agora",
-                            "momento", "hoje", "marca", "marcando", "indica", "indicando", "apresenta", "mostra", "voce", "tem"})
+                            "momento", "hoje", "marca", "marcando", "indica", "indicando", "apresenta", "mostra", "voce", "tem",
+                            "continua", "continuam", "segue", "seguem", "permanece", "permanecem", "fica", "ficam", "ficou",
+                            "ficaram", "parece", "parecem", "anda", "funciona", "funcionam", "funcionou", "encontra",
+                            "encontram", "estar", "esteve", "estiveram", "estava", "estavam", "sao", "era", "eram",
+                            "ta", "tava", "to", "talvez", "provavelmente", "possivelmente", "aparentemente"})
+# Explicit generic / explanatory markers (functional verbs, conditionals, hypotheticals). On a tool-less turn a clause is
+# exempt from the judgment rules ONLY if it has one of these AND no _PRESENT_STATE word. Anything else is judged
+# (fail-closed): "A temperatura é alta." or "O motor continua superaquecendo." are claims, not definitions.
+_GENERIC_MARKERS = frozenset({"pode", "podem", "poderia", "deve", "devem", "precisa", "precisam", "evita", "evitam",
+                              "impede", "impedem", "ajuda", "ajudam", "mantem", "garante", "garantem", "previne", "protege",
+                              "reduz", "reduzem", "permite", "permitem", "serve", "servem", "processo", "hipoteticamente",
+                              "geralmente", "se", "caso", "quando"})
+# "the earlier reading is still valid / still current": a stale value presented as the present one
+_PAST_WORDS = frozenset({"anterior", "anteriores", "antiga", "antigas", "antigo", "antigos", "passada", "passadas", "passado",
+                         "passados", "ultima", "ultimas", "ultimo", "ultimos", "ontem", "anteontem", "antes"})
+_READING_NOUNS = frozenset({"leitura", "leituras", "valor", "valores", "dado", "dados", "medicao", "medicoes", "registro",
+                            "registros"})
+_STILL_VALID = frozenset({"continua", "continuam", "segue", "seguem", "permanece", "permanecem", "vale", "valem", "valida",
+                          "validas", "valido", "validos", "atual", "atuais", "vigente", "vigentes", "ainda"})
 _UNSUPPORTED_NOUNS = frozenset({"pneu", "pneus", "pressao", "combustivel", "tanque", "oleo", "bateria", "tensao",
                                 "freio", "freios", "consumo", "odometro", "hodometro", "quilometragem", "gasolina",
                                 "etanol", "airbag", "abs", "nivel", "farol", "farois", "porta", "portas"})
@@ -75,7 +98,9 @@ _STATE_WORDS = _JUDGMENT | frozenset({"cheio", "cheia", "vazio", "vazia", "calib
 _DENIAL = re.compile(
     r"\bnao (?:tenho|ha|existe|possuo|disponho) (?:como|criterio|referencia|parametro|acesso|dados?|informac\w*|"
     r"sensor\w*|leitura\w*|ferramenta\w*|nenhum\w*)\b|"
-    r"\bnao consigo (?:dizer|avaliar|afirmar|medir|informar|confirmar|acessar|ler|ver|verificar|saber)\b|"
+    r"\bnao (?:consigo|consegui) (?:dizer|avaliar|afirmar|medir|informar|confirmar|acessar|ler|ver|verificar|saber|"
+    r"consultar|obter)\b|"
+    r"\bnao vou (?:apresent|estim|inform|afirm|us|consider|invent)\w*\b|"  # stems: "apresentá-la" tokenises as "apresenta la"
     r"\bnao (?:e|seria) possivel (?:dizer|avaliar|afirmar|confirmar|medir|verificar|saber)\b|"
     r"\bnao posso (?:dizer|avaliar|afirmar|confirmar|acessar|medir|verificar)\b|"
     r"\bnao sei (?:dizer|avaliar|se)\b|\bsem acesso\b|\bindisponivel\b|\bindisponiveis\b|\bnao foi possivel\b|"
@@ -107,6 +132,55 @@ _REAL_CLAIM = re.compile(
     r"\b(?:ao|com o|no|do|de|pelo|para o|num)\s+(?:meu\s+|seu\s+|o\s+)?(?:carro|veiculo|automovel|honda fit|fit)\s+(?:real|de verdade)\b|"
     r"\b(?:carro|veiculo)\s+(?:real|de verdade)\b|\bcarro fisico\b|\bveiculo fisico\b|\bobd (?:real|fisico)\b|"
     r"\becu (?:real|fisica)\b")
+
+
+# "e" opens a NEW statement when a subject follows it ("não vou estimar valores e O MOTOR continua alto"). Normalisation
+# strips accents, so the copula "é" ("não sei se isso é normal") is also "e": it is not followed by a subject word.
+_NEW_SUBJECT = frozenset({"o", "a", "os", "as", "um", "uma", "seu", "sua", "seus", "suas", "meu", "minha", "meus",
+                          "minhas", "ele", "ela", "eles", "elas", "voce", "eu", "isso", "isto", "esse", "essa"})
+
+
+def _segments(text: str) -> list[tuple[int, list[Tok]]]:
+    """Clause tokens split further at commas and at an "e" that introduces a new subject. Clause ids are those of
+    `clauses()`."""
+    norm = normalise(text)
+    toks = tokenize(norm)
+    out: list[tuple[int, list[Tok]]] = []
+    cur: list[Tok] = []
+
+    def flush() -> None:
+        nonlocal cur
+        if cur:
+            out.append((cur[0].sentence, cur))
+            cur = []
+
+    prev: Tok | None = None
+    for i, t in enumerate(toks):
+        if t.kind == "stop":
+            flush()
+            prev = None
+            continue
+        if prev is not None and (t.sentence != prev.sentence or "," in norm[prev.start + len(prev.text):t.start]):
+            flush()
+        cur.append(t)
+        if t.kind == "word" and t.text == "e":
+            nxt = next((x for x in toks[i + 1:] if x.kind != "stop"), None)
+            if nxt is not None and nxt.text in _NEW_SUBJECT:
+                flush()
+        prev = t
+    flush()
+    return out
+
+
+def _asserting_clauses(text: str) -> list[tuple[int, list[Tok], str]]:
+    """The clauses of `text` WITHOUT the segments that merely deny access ("não consigo ler os dados"). A denial excuses
+    only the words it governs: an earlier version skipped the whole clause, so "Não consigo ler os dados, acelerei o
+    motor." or "...o motor está superaquecendo." passed — on a turn with a valid reading as well (P7 audit)."""
+    by: dict[int, list[Tok]] = {}
+    for sid, toks in _segments(text):
+        if not _DENIAL.search(" ".join(t.text for t in toks)):
+            by.setdefault(sid, []).extend(toks)
+    return [(sid, ts, " ".join(x.text for x in ts)) for sid, ts in sorted(by.items())]
 
 
 def _norm_unit(u: str) -> str | None:
@@ -188,14 +262,18 @@ class Verifier:
                 v = b.value("speed_kmh")
                 if v is None or v != 0:
                     add("state_claim_mismatch", "stated the vehicle is not moving without a zero-speed reading")
-        for _sid, c_toks, c_txt in clauses(answer.answer):
+        for _sid, c_toks, c_txt in _asserting_clauses(answer.answer):
             words = {t.text for t in c_toks}
-            if _DENIAL.search(c_txt):
-                continue
-            # On a turn that read the vehicle these rules are strict. On a tool-less (general-knowledge) turn they only
-            # apply to clauses about the car's PRESENT state, so "a troca de óleo mantém a lubrificação adequada do
-            # motor" is a definition, not a claim about this car (found by the P7 run with the real model).
-            applies = strict or bool(words & _PRESENT_STATE)
+            # A reading carried over from the past ("a leitura anterior continua válida") is stale evidence presented as
+            # current, whether or not a tool ran this turn.
+            if words & _PAST_WORDS and words & _READING_NOUNS and words & _STILL_VALID:
+                add("temporal_misattribution", "an earlier reading was presented as still valid")
+            # On a turn that read the vehicle these rules are strict. On a tool-less (general-knowledge) turn a clause is
+            # exempt only if it is explicitly generic ("a troca de óleo mantém a lubrificação adequada do motor", found by
+            # the P7 run with the real model) and says nothing about the car's present state. The default is to judge:
+            # an earlier version exempted every clause lacking a few present-tense words, which let "o motor continua
+            # superaquecendo" through (audit of _PRESENT_STATE, P7 stabilisation).
+            applies = strict or bool(words & _PRESENT_STATE) or not (words & _GENERIC_MARKERS)
             if applies and words & _TELEMETRY_TERMS and words & _JUDGMENT:
                 add("unverifiable_judgment", "judgment about sensor values: no approved thresholds exist")
             if applies and words & _UNSUPPORTED_NOUNS and words & _STATE_WORDS:
@@ -206,21 +284,21 @@ class Verifier:
         for m in mentions:
             if m.field is not None and m.sentence in past_ids:
                 add("temporal_misattribution", "a current reading was presented as a past value")
-        for sid, _t, txt in clauses(answer.answer):
-            if sid in past_ids and (_STOPPED.search(txt) or _MOVING.search(txt)) and not _DENIAL.search(txt):
+        for sid, _t, txt in _asserting_clauses(answer.answer):
+            if sid in past_ids and (_STOPPED.search(txt) or _MOVING.search(txt)):
                 add("temporal_misattribution", "a current state was presented as a past state")
 
         # ── control claims ──
         norm = normalise(answer.answer)
-        for _sid, c_toks, c_txt in clauses(answer.answer):
+        for _sid, c_toks, c_txt in _asserting_clauses(answer.answer):
             for rx in _CONTROL:
                 for m in rx.finditer(c_txt):
                     before = c_txt[max(0, m.start() - 16):m.start()]
-                    if not _NEG_BEFORE.search(before) and not _DENIAL.search(c_txt):
+                    if not _NEG_BEFORE.search(before):
                         add("claims_vehicle_control", "the answer claims to act on or control the vehicle")
 
-        for _sid, _t, c_txt in clauses(answer.answer):
-            if _CAPABILITY.search(c_txt) and not _DENIAL.search(c_txt):
+        for _sid, _t, c_txt in _asserting_clauses(answer.answer):
+            if _CAPABILITY.search(c_txt):
                 add("claims_unavailable_capability", "the answer claims to have used a tool/source that does not exist")
 
         # ── numbers this analyser cannot read, and answers that are not Portuguese ──
@@ -276,9 +354,7 @@ class Verifier:
 
     def _state_claims(self, text: str) -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []
-        for _sid, c_toks, c_txt in clauses(text):
-            if _DENIAL.search(c_txt):
-                continue
+        for _sid, c_toks, c_txt in _asserting_clauses(text):
             for kind, rx in (("stopped", _STOPPED), ("moving", _MOVING)):
                 for m in rx.finditer(c_txt):
                     negated = bool(_NEG_BEFORE.search(c_txt[max(0, m.start() - 14):m.start()]))
