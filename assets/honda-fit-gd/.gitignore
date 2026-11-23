@@ -1,0 +1,18 @@
+out/*/renders/board_*.png
+out/*/renders/overlay_*.png
+refs_local/
+out/*/*_local.png
+candidates_local/
+
+# outputs derived from THIRD-PARTY models (renders, aligned .blend, part sheets): regenerable from candidates_local, never versioned
+out/candidate_*/
+# Blender writes a .blend1 backup next to every save
+*.blend1
+
+# DERIVED FROM THIRD-PARTY REFERENCES whose licences were not verified (a blueprint of unconfirmed Creative Commons subtype and
+# photographs): the procedural models v1-v3 and their renders, and the profile numbers / outlines read from those references.
+# Not versioned out of caution. The scripts regenerate everything from a local reference pack (see README.md).
+out/**/*.blend
+out/**/renders/
+data/
+scripts/photo_features.py

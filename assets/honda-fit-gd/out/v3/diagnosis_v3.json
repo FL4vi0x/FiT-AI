@@ -1,0 +1,148 @@
+{
+ "mesh": {
+  "verts": 13106,
+  "faces": 13184,
+  "tris": 26210,
+  "non_manifold_edges": 4,
+  "boundary_edges": 2,
+  "zero_area_faces": 2,
+  "faces_aspect_gt_8": 2326,
+  "signed_volume_m3": 5.8282
+ },
+ "normals": {
+  "faces_whose_outward_ray_hits_the_body_again": 88,
+  "note": "nonzero can mean concavities (wheel arches, groove) as well as flipped normals"
+ },
+ "stations": {
+  "total_rows": 168,
+  "rows_in_first_5cm": 13,
+  "rows_5cm_to_50cm": 27,
+  "rows_50cm_to_100cm": 18,
+  "mean_row_spacing_mid_body_m": 0.0342
+ },
+ "creases": {
+  "edges_over_35deg": 880,
+  "share_of_edges_pct": 3.35
+ },
+ "flank": {
+  "faces": 775,
+  "normal_angle_std_deg": 4.75,
+  "normal_angle_max_deg": 40.28
+ },
+ "patches": {
+  "FrontGrille": {
+   "verts": 2460,
+   "open_boundary_edges": 272,
+   "dist_to_body_mm_min_mean_max": [
+    0.9,
+    4.0,
+    4.0
+   ]
+  },
+  "FrontIntake": {
+   "verts": 3020,
+   "open_boundary_edges": 334,
+   "dist_to_body_mm_min_mean_max": [
+    4.0,
+    4.0,
+    4.0
+   ]
+  },
+  "FrontPlateRecess": {
+   "verts": 1513,
+   "open_boundary_edges": 202,
+   "dist_to_body_mm_min_mean_max": [
+    3.0,
+    3.0,
+    3.0
+   ]
+  },
+  "Headlights": {
+   "verts": 3510,
+   "open_boundary_edges": 316,
+   "dist_to_body_mm_min_mean_max": [
+    12.9,
+    14.0,
+    14.0
+   ]
+  },
+  "Mirrors": {
+   "verts": 628,
+   "open_boundary_edges": 0,
+   "dist_to_body_mm_min_mean_max": [
+    43.2,
+    100.8,
+    156.2
+   ]
+  },
+  "RearLights": {
+   "verts": 3876,
+   "open_boundary_edges": 344,
+   "dist_to_body_mm_min_mean_max": [
+    10.7,
+    14.0,
+    14.0
+   ]
+  },
+  "RearPlateRecess": {
+   "verts": 2130,
+   "open_boundary_edges": 192,
+   "dist_to_body_mm_min_mean_max": [
+    3.0,
+    3.0,
+    3.0
+   ]
+  },
+  "RearWindow": {
+   "verts": 8898,
+   "open_boundary_edges": 498,
+   "dist_to_body_mm_min_mean_max": [
+    5.9,
+    6.0,
+    6.0
+   ]
+  },
+  "WindowsSide_0": {
+   "verts": 18808,
+   "open_boundary_edges": 848,
+   "dist_to_body_mm_min_mean_max": [
+    5.9,
+    6.0,
+    6.0
+   ]
+  },
+  "WindowsSide_1": {
+   "verts": 10824,
+   "open_boundary_edges": 568,
+   "dist_to_body_mm_min_mean_max": [
+    5.9,
+    6.0,
+    6.0
+   ]
+  },
+  "WindowsSide_2": {
+   "verts": 6840,
+   "open_boundary_edges": 444,
+   "dist_to_body_mm_min_mean_max": [
+    6.0,
+    6.0,
+    6.0
+   ]
+  },
+  "Windscreen": {
+   "verts": 8814,
+   "open_boundary_edges": 590,
+   "dist_to_body_mm_min_mean_max": [
+    5.9,
+    6.0,
+    6.0
+   ]
+  }
+ },
+ "tyre_body_overlapping_triangle_pairs": {
+  "FrontLeftWheel": 61,
+  "FrontRightWheel": 61,
+  "RearLeftWheel": 63,
+  "RearRightWheel": 63
+ }
+}

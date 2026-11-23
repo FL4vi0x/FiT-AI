@@ -1,0 +1,27 @@
+{
+ "body_bbox_m": {
+  "width_x": 1.675,
+  "length_y": 3.83,
+  "height_z": 1.5248
+ },
+ "official_m": {
+  "width": 1.675,
+  "length": 3.83,
+  "height": 1.525,
+  "wheelbase": 2.45
+ },
+ "wheelbase_m": 2.45,
+ "wheel_radius_m": 0.29,
+ "wheels": [
+  "FrontLeftWheel",
+  "FrontRightWheel",
+  "RearLeftWheel",
+  "RearRightWheel"
+ ],
+ "tris_body_evaluated": 11266,
+ "deviation_mm": {
+  "length": 0.0,
+  "width": 0.0,
+  "height": -0.2
+ }
+}
