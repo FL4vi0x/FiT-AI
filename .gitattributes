@@ -1,0 +1,45 @@
+# Line endings. The repository stores LF (it always has). On Windows, `core.autocrlf=true` would otherwise make working
+# copies CRLF and produce "LF will be replaced by CRLF" warnings; source files are pinned to LF so editors, Vite, Vitest and
+# Python read the same bytes everywhere, and only Windows-native scripts are checked out with CRLF.
+* text=auto
+
+*.py   text eol=lf
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.mts  text eol=lf
+*.cjs  text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.txt  text eol=lf
+*.svg  text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+.npmrc         text eol=lf
+
+# Windows-native scripts keep CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never touched by line-ending conversion
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.glb  binary
+*.gltf binary
+*.fbx  binary
+*.blend binary
+*.sqlite binary
+*.db   binary

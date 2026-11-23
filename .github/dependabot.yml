@@ -1,0 +1,22 @@
+# Weekly update PRs. Dependabot only opens pull requests: nothing is merged or published by it.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # runtime and tooling dependencies are pinned to exact versions on purpose (ui/.npmrc: save-exact): keep it that way
+    versioning-strategy: increase
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
