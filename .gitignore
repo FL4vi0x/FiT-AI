@@ -12,3 +12,21 @@ bench/results/
 *.db-shm
 *.db-journal
 runtime/
+
+# P8 UI (Vite + React): dependencies, build output and e2e artefacts are regenerable
+ui/node_modules/
+ui/dist/
+ui/e2e/out/
+*.tsbuildinfo
+ui/.stack.json
+
+# LOCAL vehicle preview (P8.2 model preview): rights-restricted 3D assets and their local config are NEVER versioned
+ui/.local/
+ui/.env.local
+assets/honda-fit-gd/candidates_local/
+assets/honda-fit-gd/refs_local/
+assets/honda-fit-gd/out/previews/
+*.glb
+*.fbx
+# local, per-machine switches (never versioned)
+ui/.env*.local
