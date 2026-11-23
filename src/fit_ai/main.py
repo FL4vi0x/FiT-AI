@@ -16,7 +16,9 @@ from fit_ai.config import ConfigError, Settings
 from fit_ai.conversation.config import ChatSettings
 from fit_ai.conversation.factory import ChatRuntime, build_chat_runtime
 from fit_ai.conversation.service import ConversationService
+from fit_ai.conversation.warmup import start_background_warmup
 from fit_ai.domain.telemetry import TelemetryError, TelemetryProvider
+from fit_ai.services.llm_status import LLMStatusService
 from fit_ai.services.telemetry import TelemetryService
 
 log = logging.getLogger("fit_ai")
@@ -60,7 +62,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        warming = start_background_warmup(runtime)  # opt-in; returns at once, never delays the start
         yield
+        if warming is not None and not warming.done():
+            warming.cancel()
         if runtime is not None:
             await runtime.close()
         close = getattr(provider, "aclose", None)
@@ -70,6 +75,8 @@ def create_app(
     app = FastAPI(title="Fit AI Core", version=__version__, lifespan=lifespan)
     app.state.telemetry_service = telemetry_service
     app.state.conversation_service = conversation_service
+    # without a production chat runtime (tests, or chat disabled) there is no language model to report on
+    app.state.llm_status_service = LLMStatusService(runtime.llm_health if runtime else None, model=runtime.model if runtime else None)
     app.add_exception_handler(TelemetryError, telemetry_error_handler)
     install_chat_error_handlers(app)
     app.include_router(router)

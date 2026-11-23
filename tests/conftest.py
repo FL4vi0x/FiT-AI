@@ -9,6 +9,24 @@ def anyio_backend():
     return "asyncio"
 
 
+def sdk_available() -> bool:
+    """The OCTAVE SDK lives OUTSIDE this repository (FIT/runtime/octave-sdk-0.9.6, extracted from the OCTAVE project, whose licence
+    decision is still open), so a clean clone, or CI, does not have it. Tests that really need it are skipped, visibly."""
+    return (Settings.from_env().octave_sdk_path / "octave_client" / "__init__.py").is_file()
+
+
+NEEDS_SDK_REASON = "the OCTAVE SDK is not installed (FIT/runtime/octave-sdk-0.9.6 or OCTAVE_SDK_PATH): it is not part of this repository"
+
+
+def pytest_collection_modifyitems(config, items):
+    if sdk_available():
+        return
+    skip = pytest.mark.skip(reason=NEEDS_SDK_REASON)
+    for item in items:
+        if "needs_sdk" in item.keywords or "sdk" in getattr(item, "fixturenames", ()):
+            item.add_marker(skip)
+
+
 @pytest.fixture(scope="session")
 def sdk():
     """The official OCTAVE SDK, loaded in place (only for its exception classes in unit tests)."""

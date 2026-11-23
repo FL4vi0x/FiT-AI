@@ -448,6 +448,7 @@ def test_injected_provider_alone_creates_no_database(tmp_path, monkeypatch):
 
 
 # ───────────────────── production wiring (no services running) ─────────────────────
+@pytest.mark.needs_sdk
 def test_production_wiring_builds_the_chat_and_survives_missing_services(tmp_path, monkeypatch):
     monkeypatch.setenv("FIT_AI_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("FIT_AI_OLLAMA_URL", "http://127.0.0.1:9")  # nothing listens here
@@ -463,6 +464,7 @@ def test_production_wiring_builds_the_chat_and_survives_missing_services(tmp_pat
     assert not any(ch.isdigit() for ch in body["answer"]) and body["model_status"] == "unavailable"
 
 
+@pytest.mark.needs_sdk
 def test_unwritable_data_directory_disables_chat_but_not_the_core(tmp_path, monkeypatch):
     blocker = tmp_path / "a-file"
     blocker.write_text("x")
@@ -473,6 +475,7 @@ def test_unwritable_data_directory_disables_chat_but_not_the_core(tmp_path, monk
     assert post(c).json()["error"]["code"] == "chat_unavailable"
 
 
+@pytest.mark.needs_sdk
 def test_invalid_chat_settings_disable_chat_and_keep_the_strict_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("FIT_AI_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("FIT_AI_CHAT_MAX_CONCURRENT", "banana")

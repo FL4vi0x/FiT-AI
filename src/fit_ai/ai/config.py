@@ -22,6 +22,10 @@ _MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-/]{0,100}:[A-Za-z0-9][A-Za-z0-9.
 TIMEOUT_RANGE_S = (1.0, 600.0)
 CONTEXT_RANGE = (512, 16384)  # 16K keeps KV-cache RAM moderate on a 31 GB laptop; raise deliberately
 MAX_TOKENS_LIMIT = 4096
+# how long the server may keep the model in memory after the last request: 30 s .. 24 h ("-1", forever, is refused on purpose)
+_KEEP_ALIVE = re.compile(r"^(\d{1,4})([smh])$")
+KEEP_ALIVE_MAX_S = 24 * 3600
+WARMUP_RAM_RANGE_MB = (1024, 131072)
 
 
 def validate_model_name(model: str) -> str:
@@ -64,6 +68,10 @@ class LLMSettings:
     temperature: float = 0.2
     seed: int = 42
     think: bool = False
+    # OPT-IN, both off by default: warm the model at start-up, and ask the server to keep it in memory for a while
+    warmup: bool = False
+    warmup_min_free_ram_mb: int = 6000
+    keep_alive: str | None = None
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "LLMSettings":
@@ -77,6 +85,9 @@ class LLMSettings:
             temperature=_num(e, "FIT_AI_LLM_TEMPERATURE", cls.temperature, float),
             seed=_num(e, "FIT_AI_LLM_SEED", cls.seed, int),
             think=_bool(e, "FIT_AI_LLM_THINK", cls.think),
+            warmup=_bool(e, "FIT_AI_LLM_WARMUP", cls.warmup),
+            warmup_min_free_ram_mb=_num(e, "FIT_AI_LLM_WARMUP_MIN_FREE_RAM_MB", cls.warmup_min_free_ram_mb, int),
+            keep_alive=(e.get("FIT_AI_LLM_KEEP_ALIVE") or "").strip() or None,
         )
         settings.validate()
         return settings
@@ -102,6 +113,13 @@ class LLMSettings:
             raise ConfigError(f"FIT_AI_LLM_TEMPERATURE must be within 0..2, got {self.temperature}")
         if not 0 <= self.seed <= 2**31 - 1:
             raise ConfigError("FIT_AI_LLM_SEED must be within 0..2147483647")
+        if not WARMUP_RAM_RANGE_MB[0] <= self.warmup_min_free_ram_mb <= WARMUP_RAM_RANGE_MB[1]:
+            raise ConfigError(f"FIT_AI_LLM_WARMUP_MIN_FREE_RAM_MB must be within {WARMUP_RAM_RANGE_MB}")
+        if self.keep_alive is not None:
+            m = _KEEP_ALIVE.match(self.keep_alive)
+            seconds = int(m.group(1)) * {"s": 1, "m": 60, "h": 3600}[m.group(2)] if m else 0
+            if not 30 <= seconds <= KEEP_ALIVE_MAX_S:
+                raise ConfigError("FIT_AI_LLM_KEEP_ALIVE must look like 30s, 10m or 2h and be within 30 s .. 24 h")
 
 
 def _num(env: dict[str, str], key: str, default, cast):

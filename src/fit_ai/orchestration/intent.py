@@ -32,9 +32,14 @@ _INJECTION = re.compile(
 
 _TELEMETRY = re.compile(
     r"\b(?:rotac\w*|rpm|giros?|velocidade|kmh|km h|temperatura|arrefec\w*|esquent\w*|aquec\w*|superaquec\w*|"
-    r"quente|motor|parado|parada|andando|movimento|devagar|rapido|leitura\w*|telemetria|sensores?|graus|celsius|"
+    r"quente|parado|parada|andando|movimento|devagar|rapido|leitura\w*|telemetria|sensores?|graus|celsius|"
     r"mph|milhas|fahrenheit|ms|metros por segundo|"
     r"marcha lenta|como esta o carro|dados do (?:carro|veiculo))\b")
+# "motor" on its own is a weak signal ("como está o motor?" asks for a reading, "o que é um motor flex?" does not): it only
+# selects the telemetry tool when the question is not a request to EXPLAIN something.
+_ENGINE_WORD = re.compile(r"\bmotor\b")
+_EXPLAIN = re.compile(r"\b(?:o que (?:e|significa|quer dizer)|como funciona\w*|explique|explica|me explic\w*|pode explicar|"
+                      r"diferenca entre|para que serve|qual a diferenca)\b")
 _RPM = re.compile(r"\b(?:rotac\w*|rpm|giros?|marcha lenta)\b")
 _SPEED = re.compile(r"\b(?:velocidade|kmh|km h|mph|milhas|ms|metros por segundo|parado|parada|andando|movimento|devagar|rapido)\b")
 _TEMP = re.compile(r"\b(?:temperatura|arrefec\w*|esquent\w*|aquec\w*|superaquec\w*|quente|graus|celsius|fahrenheit)\b")
@@ -81,5 +86,6 @@ def classify(text: str) -> Intent:
         strong = any(v in _STRONG for v in verbs)
         control = strong or (bool(_TARGET.search(t)) and not _QUESTION_LEAD.match(t))
     fields = tuple(f for f, rx in (("rpm", _RPM), ("speed_kmh", _SPEED), ("coolant_temp_c", _TEMP)) if rx.search(t))
-    return Intent(control=control, injection=bool(_INJECTION.search(t)), telemetry=bool(_TELEMETRY.search(t)),
+    telemetry = bool(_TELEMETRY.search(t)) or (bool(_ENGINE_WORD.search(t)) and not _EXPLAIN.search(t))
+    return Intent(control=control, injection=bool(_INJECTION.search(t)), telemetry=telemetry,
                   status=bool(_STATUS.search(t)), memory=bool(_MEMORY.search(t)), fields=fields)

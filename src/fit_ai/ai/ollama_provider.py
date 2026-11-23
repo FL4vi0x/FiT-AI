@@ -231,6 +231,8 @@ class OllamaProvider:
                 "num_predict": req.max_tokens,
             },
         }
+        if self._s.keep_alive:
+            body["keep_alive"] = self._s.keep_alive  # opt-in: how long the server keeps the model after this request
         if req.tools:
             body["tools"] = [
                 {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}

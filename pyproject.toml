@@ -33,4 +33,5 @@ addopts = "-ra"
 markers = [
     "integration: needs a running OCTAVE on 127.0.0.1 (skipped automatically when unreachable)",
     "integration_llm: needs a running local Ollama with the configured models (skipped automatically when unavailable)",
+    "needs_sdk: needs the OCTAVE SDK, which is outside this repository (skipped automatically when it is not installed)",
 ]

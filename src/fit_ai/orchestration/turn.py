@@ -181,6 +181,7 @@ class AssistantOrchestrator:
         ctx.timings["memory_ms"] = (time.perf_counter() - mem_t) * 1000
 
         base = [system_message(), user_message(text, ctx.bundle, memory_block)]
+        has_readings = bool(ctx.bundle.telemetry or ctx.bundle.status)
         verify_ms = llm_ms = 0.0
         attempts: list[tuple[bool, tuple[str, ...]]] = []
         messages = list(base)
@@ -201,7 +202,7 @@ class AssistantOrchestrator:
                            summary="the model output was rejected by the provider contract (invalid or undeclared tool call)")
                 attempts.append((False, (code,)))
                 if attempt == 1:
-                    messages = [*base, correction_message((code,))]
+                    messages = [*base, correction_message((code,), with_readings=has_readings)]
                     continue
                 break
             except LLMError as exc:  # timeout, unavailable, transport...: retrying would not help
@@ -244,7 +245,7 @@ class AssistantOrchestrator:
                 messages = [*base]
                 if resp.content.strip():
                     messages.append(ChatMessage.assistant(resp.content[:600]))
-                messages.append(correction_message(codes))
+                messages.append(correction_message(codes, with_readings=has_readings))
 
         ctx.timings["llm_ms"], ctx.timings["verify_ms"] = llm_ms, verify_ms
         first_ok = attempts[0][0] if attempts else None

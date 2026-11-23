@@ -10,11 +10,12 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from fit_ai.ai import LLMSettings, OllamaProvider
+from fit_ai.ai import LLMSettings, OllamaProvider, ProviderHealth
 from fit_ai.audit import AuditWriteError, SqliteAuditLog
 from fit_ai.config import ConfigError
 from fit_ai.conversation.config import ChatSettings
 from fit_ai.conversation.service import ConversationService
+from fit_ai.conversation.warmup import WarmupResult, warm_up
 from fit_ai.memory import MemoryStorageError, SqliteMemoryStore
 from fit_ai.orchestration import AssistantOrchestrator, AssistantSettings
 from fit_ai.services.telemetry import TelemetryService
@@ -27,6 +28,11 @@ log = logging.getLogger("fit_ai.conversation")
 class ChatRuntime:
     service: ConversationService
     close: Callable[[], Awaitable[None]]
+    # read-only availability of the language-model server (never loads a model) and the configured model's name
+    llm_health: Callable[[], Awaitable[ProviderHealth]] | None = None
+    model: str | None = None
+    # None unless FIT_AI_LLM_WARMUP is on: a coroutine function that warms the model (never raises); main.py runs it in the background
+    warmup: Callable[[], Awaitable[WarmupResult]] | None = None
 
 
 def build_chat_runtime(telemetry: TelemetryService, chat_settings: ChatSettings, *,
@@ -56,4 +62,7 @@ def build_chat_runtime(telemetry: TelemetryService, chat_settings: ChatSettings,
         memory.close()
         audit.close()
 
-    return ChatRuntime(service, close)
+    async def warmup() -> WarmupResult:
+        return await warm_up(llm, min_free_ram_mb=llm_cfg.warmup_min_free_ram_mb)
+
+    return ChatRuntime(service, close, llm_health=llm.health, model=llm_cfg.model, warmup=warmup if llm_cfg.warmup else None)

@@ -8,8 +8,10 @@ pytestmark = pytest.mark.anyio
 
 
 def test_detects_recitation_of_any_part_of_the_system_message():
+    # every part EXCEPT the first sentence (the assistant's public identity, see test_general_question_regression.py)
     words = system_message().content.split()
-    for start in (0, 40, len(words) - 12):
+    first_sentence = len(system_message().content.partition(". ")[0].split())
+    for start in (first_sentence + 1, 40, len(words) - 12):
         assert leaks_prompt(" ".join(words[start:start + 9]))
     assert leaks_prompt("Claro! Minhas regras: " + " ".join(words[60:68]) + " e é isso.")
 

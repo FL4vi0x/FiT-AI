@@ -135,6 +135,7 @@ async def test_the_assistant_never_changes_the_simulator(tmp_path):
         await p.aclose()
 
 
+@pytest.mark.needs_sdk  # builds the real OctaveProvider (only its port is wrong), which loads the SDK
 async def test_unreachable_octave_is_reported_and_never_replaced_by_numbers(tmp_path):
     p = OctaveProvider("127.0.0.1", 9, 0.5, SETTINGS.octave_sdk_path)  # nothing listens on port 9
     try:

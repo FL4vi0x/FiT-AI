@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 
 from fit_ai import __version__
 from fit_ai.domain.telemetry import TelemetryError
+from fit_ai.services.llm_status import LLMStatusService
 from fit_ai.services.telemetry import TelemetryService
 
 # error code -> HTTP status
@@ -46,6 +48,12 @@ class StatusResponse(BaseModel):
     protocol_version: int | None
     octave_version: str | None
     detail: str | None
+
+
+class LLMStatusResponse(BaseModel):
+    state: Literal["available", "model_not_installed", "unavailable", "unverified", "not_configured"]
+    model: str | None
+    checked_at: datetime
 
 
 class ErrorBody(BaseModel):
@@ -107,3 +115,13 @@ async def get_status(request: Request) -> StatusResponse:
         octave_version=status.octave_version,
         detail=status.detail,
     )
+
+
+@router.get("/api/v1/llm/status", response_model=LLMStatusResponse, tags=["assistant"])
+async def get_llm_status(request: Request) -> LLMStatusResponse:
+    """Availability of the local language-model server. Always 200, read-only, no parameters: the server address and the
+    model come from the Core's own configuration, never from the request. It never starts the server and never loads a
+    model. `unverified` means the check could not be completed, not that the server is down."""
+    service: LLMStatusService = request.app.state.llm_status_service
+    status = await service.get_status()
+    return LLMStatusResponse(state=status.state, model=status.model, checked_at=status.checked_at)
