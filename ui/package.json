@@ -31,7 +31,7 @@
     "@types/react-dom": "19.1.6",
     "@types/three": "0.170.0",
     "@vitejs/plugin-react": "4.5.2",
-    "autoprefixer": "10.4.21",
+    "autoprefixer": "10.7.0",
     "axe-core": "4.14.0",
     "jsdom": "26.1.0",
     "playwright-core": "1.53.1",
