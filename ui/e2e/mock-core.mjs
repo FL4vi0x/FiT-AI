@@ -19,6 +19,7 @@ const defaults = () => ({
   status: { available: true, state: 'connected', source: 'octave', simulated: true, protocol_version: 3, octave_version: '0.9.6', detail: null },
   telemetry: { kind: 'ok' }, // 'ok' | 'partial' | 'error'
   chat: { kind: 'auto' }, // 'auto' | 'fallback' | 'error' | 'no-tools'
+  llm: { state: 'available' }, // 'available' | 'model_not_installed' | 'unavailable' | 'unverified' | 'not_configured'
 })
 
 export function startMockCore({ port = 8010 } = {}) {
@@ -87,6 +88,9 @@ export function startMockCore({ port = 8010 } = {}) {
     if (url.pathname === '/health') {
       if (!cfg.health.ok) return send(res, 500, { error: { code: 'internal_error', message: 'x' } })
       return send(res, 200, { status: 'ok', service: 'fit-ai-core', version: '0.1.0' })
+    }
+    if (url.pathname === '/api/v1/llm/status') {
+      return send(res, 200, { state: cfg.llm.state, model: 'qwen3:4b-instruct-2507-q4_K_M', checked_at: new Date().toISOString() })
     }
     if (url.pathname === '/api/v1/vehicle/status') {
       await sleep(cfg.latency.status)

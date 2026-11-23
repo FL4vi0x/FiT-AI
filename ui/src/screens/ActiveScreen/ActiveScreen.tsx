@@ -4,11 +4,13 @@ import { AICore } from '../../components/active/AICore'
 import { AmbientRings } from '../../components/active/AmbientRings'
 import { VehiclePlatform } from '../../components/active/VehiclePlatform'
 import { VehicleStage } from '../../components/active/VehicleStage'
+import { TelemetryReadout } from '../../components/active/TelemetryReadout'
 import { VoiceWaveform } from '../../components/active/VoiceWaveform'
 import { lightVariants } from '../../motion/activeVariants'
 import { usePrefersReducedMotion } from '../../motion/useReducedMotion'
 import type { FitAIVisualState } from '../../state/visualState'
 import type { ServiceStatus } from '../../state/useServiceStatus'
+import type { TelemetryView } from '../../state/useTelemetry'
 import { useNow } from '../../state/useNow'
 import styles from './ActiveScreen.module.css'
 
@@ -16,7 +18,7 @@ import styles from './ActiveScreen.module.css'
  * Screen 02: the active holographic vehicle interface. Voice-first: no text field, no chat, no bubbles. The visual state comes
  * from outside (see state/visualState.ts); the service chips come from real checks.
  */
-export default function ActiveScreen({ state, services }: { state: FitAIVisualState; services: ServiceStatus }) {
+export default function ActiveScreen({ state, services, telemetry = { kind: 'idle' } }: { state: FitAIVisualState; services: ServiceStatus; telemetry?: TelemetryView }) {
   const reduced = usePrefersReducedMotion()
   const now = useNow(1000)
   return (
@@ -27,6 +29,7 @@ export default function ActiveScreen({ state, services }: { state: FitAIVisualSt
         <AICore />
         <VehiclePlatform />
         <VehicleStage reduced={reduced} />
+        <TelemetryReadout view={telemetry} services={services} now={now} />
         <VoiceWaveform />
         <ActiveHeader services={services} now={now} />
       </motion.div>

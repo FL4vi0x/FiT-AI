@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { startMockCore } from './mock-core.mjs'
 
+// P8.3: the Active screen reads Core health, OCTAVE status, real telemetry and the Ollama status. All GET, none starts anything. Chat stays forbidden.
+const READ_ONLY = new Set(['/health', '/api/v1/vehicle/status', '/api/v1/vehicle/telemetry', '/api/v1/llm/status'])
 const here = path.dirname(fileURLToPath(import.meta.url))
 const uiDir = path.resolve(here, '..')
 const out = path.join(here, 'out', 'active')
@@ -51,7 +53,7 @@ for (const [w, h] of [[1920, 1080], [1600, 900], [1366, 768], [1280, 720], [1024
   check(o.x <= 0 && o.y <= 0, `${tag} no overflow (${o.x},${o.y})`)
   check(logs.errors.length === 0, `${tag} no console errors ${logs.errors.join(' | ')}`)
   const paths = [...new Set(logs.requests)]
-  check(paths.every((p) => p === '/health' || p === '/api/v1/vehicle/status') && paths.length > 0, `${tag} requests are only the two read-only checks: ${paths.join(', ')}`)
+  check(paths.every((p) => READ_ONLY.has(p)) && paths.length > 0, `${tag} requests are only the read-only GETs (no chat): ${paths.join(', ')}`)
   check((await page.getByTestId('vehicle-notice').count()) === 0 && (await page.getByTestId('vehicle-canvas').count()) === 1, `${tag} WebGL car rendered (no fallback notice)`)
   const hdr = await page.getByTestId('active-header').boundingBox()
   const overlap = await page.evaluate(() => [...document.querySelectorAll('header *')].filter((e) => !/srOnly/.test(e.className)).some((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== 'visible'))
@@ -98,7 +100,7 @@ for (const [w, h] of [[1920, 1080], [1600, 900], [1366, 768], [1280, 720], [1024
   check((await page.getByTestId('active-screen').getAttribute('data-state')) === 'active', 'transition ends in active')
   check((await page.getByTestId('standby-layer').count()) === 0, 'Standby layer removed after the contraction')
   const paths = [...new Set(logs.requests)]
-  check(paths.every((p) => p === '/health' || p === '/api/v1/vehicle/status'), `no chat/telemetry call during the transition: ${paths.join(', ')}`)
+  check(paths.every((p) => READ_ONLY.has(p)), `no chat call during the transition, only read-only GETs: ${paths.join(', ')}`)
   await ctx.close()
 }
 

@@ -28,6 +28,16 @@ export interface StatusResponse {
   detail: string | null
 }
 
+/** Availability of the local language-model server, as the Core reports it (GET /api/v1/llm/status). `unverified`: the check could
+ *  not be completed; it says nothing about whether the server is up. */
+export type LlmState = 'available' | 'model_not_installed' | 'unavailable' | 'unverified' | 'not_configured'
+
+export interface LlmStatusResponse {
+  state: LlmState
+  model: string | null
+  checked_at: string // ISO 8601
+}
+
 export type AnswerOrigin = 'llm' | 'llm_retry' | 'fallback' | 'deterministic' | 'policy_refusal' | 'memory_command'
 export type Availability = 'not_requested' | 'ok' | 'partial' | 'stale' | 'unavailable'
 export type ModelStatus = 'ok' | 'unavailable' | 'timeout' | 'not_found' | 'error' | 'not_used'

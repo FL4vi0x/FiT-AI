@@ -43,7 +43,19 @@ export default defineConfig({
   plugins: [react(), cspForBuild(), localVehicleAssets({ configPath: process.env.FIT_LOCAL_VEHICLE_CONFIG ?? '.local/vehicle-models.json' })],
   server: { host: '127.0.0.1', port: 5173, strictPort: true, proxy },
   preview: { host: '127.0.0.1', port: 4173, strictPort: true, proxy },
-  build: { sourcemap: false, target: 'es2022' },
+  build: {
+    sourcemap: false,
+    target: 'es2022',
+    rollupOptions: {
+      output: {
+        // three.js is loaded lazily (only the active screen pulls it in) and rarely changes, while the app's own 3D code changes often:
+        // its own chunk gets its own cache entry. Its size is inherent to the renderer, so the warning limit is set just above it.
+        // the loader in three/examples stays its own lazy chunk: it is only fetched when a model file is actually configured
+        manualChunks: (id) => (id.includes('/node_modules/three/') && !id.includes('/node_modules/three/examples/') ? 'three' : undefined),
+      },
+    },
+    chunkSizeWarningLimit: 560,
+  },
   test: {
     environment: 'jsdom',
     globals: true,

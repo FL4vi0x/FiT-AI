@@ -109,7 +109,7 @@
 .wordmark { font-style: italic; font-weight: 800; font-size: clamp(20px, 2.1vw, 34px); letter-spacing: 0.02em; }
 .fit { background: linear-gradient(#fff, #9b9897); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .ai { background: linear-gradient(#ffca68, #fb6901); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.tagline { font-size: clamp(8px, 0.7vw, 12px); letter-spacing: 0.04em; color: var(--fit-text-secondary); white-space: nowrap; }
+.tagline { font-size: clamp(12px, 0.7vw, 13px); letter-spacing: 0.04em; color: var(--fit-text-secondary); white-space: nowrap; }
 .vehicleInfo { display: flex; flex-direction: column; gap: 3px; padding-left: clamp(8px, 1vw, 16px); border-left: 1px solid rgba(255, 255, 255, 0.18); white-space: nowrap; }
 .vehicleInfo span:first-child { font-weight: 600; }
 .vehicleInfo span:last-child { color: var(--fit-text-secondary); }
@@ -151,11 +151,43 @@
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 @media (max-width: 1280px) { .vehicleInfo { display: none; } }
+/* small screens (1024 x 600): nothing in the header drops below 12 px (it was 10 px); the room comes from tighter spacing instead */
 @media (max-width: 1100px) {
   .tagline { display: none; }
-  .navItem span:not(.srOnly) { font-size: 10px; }
-  .navItem { min-width: 46px; padding: 0 8px; }
+  .navItem span:not(.srOnly) { font-size: 12px; }
+  .navItem { min-width: 52px; padding: 0 6px; gap: 3px; }
+  .brand { gap: 8px; }
+  .chip { padding: 5px 8px; gap: 6px; }
+  .right { gap: 6px; }
 }
+
+/* ───────── telemetry readout (the three readings the Core provides + the origin badge) ───────── */
+.telemetry {
+  position: absolute; left: 1.2%; top: 54%; width: clamp(176px, 15.5%, 250px); z-index: 3; pointer-events: none;
+  padding: 8px 10px 9px; border-left: 2px solid rgba(255, 133, 0, 0.75);
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0));
+  font-size: clamp(12px, 0.8vw + 3px, 15px); line-height: 1.25;
+}
+.telemetryHead { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 6px; }
+.telemetryTitle { font-size: max(12px, 0.85em); letter-spacing: 0.14em; color: var(--fit-text-secondary); }
+.originBadge {
+  display: inline-block; white-space: nowrap; padding: 1px 6px; border: 1px solid currentColor; border-radius: 4px; font-size: max(12px, 0.82em); font-weight: 700; letter-spacing: 0.06em;
+  color: #ffb04a; background: rgba(255, 133, 0, 0.12);
+}
+.originBadge[data-tone='real'] { color: #34d17a; background: rgba(52, 209, 122, 0.1); }
+.originBadge[data-tone='unknown'] { color: #c9c9c9; background: rgba(255, 255, 255, 0.07); }
+.readings { margin: 0; display: grid; gap: 5px; }
+.reading { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 8px; }
+.reading dt { color: var(--fit-text-secondary); }
+.reading dd { margin: 0; display: flex; align-items: baseline; gap: 4px; justify-content: flex-end; }
+.reading strong { font-size: 1.35em; font-weight: 600; color: var(--fit-text-primary); font-variant-numeric: tabular-nums; }
+.reading[data-absent] strong { color: var(--fit-text-secondary); }
+.dimValue { opacity: 0.45; }
+.unit { color: #ffb04a; font-size: max(12px, 0.85em); }
+.telemetryNote { margin: 7px 0 0; font-size: max(12px, 0.9em); color: var(--fit-text-secondary); }
+.telemetryNote[data-tone='warn'] { color: #ffb04a; }
+.telemetryNote[data-tone='off'] { color: #ff6b5b; }
+.telemetryNote[data-tone='ok'] { color: #34d17a; }
 
 /* ───────── demo panel (development only) ───────── */
 .demo {

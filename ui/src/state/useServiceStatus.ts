@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createApi, type FitAiApi } from '../api/client'
+import type { LlmState } from '../api/types'
 
 export type CoreLink = 'checking' | 'online' | 'offline'
 export type OctaveLink = 'checking' | 'connected' | 'vehicle_link_down' | 'unavailable' | 'no_core'
@@ -10,19 +11,26 @@ export interface ServiceStatus {
   /** true when the Core reports that the vehicle data is simulated */
   simulated: boolean | null
   /**
-   * The Core exposes no endpoint for Ollama's state (only /health for itself and /vehicle/status for OCTAVE), so the UI
-   * cannot know it. It is reported as "not verified" and never as online.
+   * The language-model server, from the Core's read-only GET /api/v1/llm/status. `unverified` when the check could not be
+   * completed, when the Core is unreachable or when it predates the endpoint: never reported as available without proof.
    */
-  ollama: 'unverified'
+  ollama: 'checking' | LlmState
 }
 
-export const INITIAL_STATUS: ServiceStatus = { core: 'checking', octave: 'checking', simulated: null, ollama: 'unverified' }
+const LLM_STATES: readonly LlmState[] = ['available', 'model_not_installed', 'unavailable', 'unverified', 'not_configured']
+
+/** The Core's answer is data, not code: an unknown or malformed state (a newer Core, a proxy page) is "not verified", never a crash. */
+export function toLlmState(value: unknown): LlmState {
+  return typeof value === 'string' && (LLM_STATES as readonly string[]).includes(value) ? (value as LlmState) : 'unverified'
+}
+
+export const INITIAL_STATUS: ServiceStatus = { core: 'checking', octave: 'checking', simulated: null, ollama: 'checking' }
 
 export const POLL_MS = 10_000
 
 /**
- * Real link checks, read-only: GET /health and GET /api/v1/vehicle/status, every 10 s while the tab is visible. It never calls
- * /chat and never reads telemetry. `enabled` false (Standby) means no request at all.
+ * Real link checks, read-only: GET /health, GET /api/v1/vehicle/status and GET /api/v1/llm/status, every 10 s while the tab is
+ * visible. It never calls /chat and never reads telemetry. `enabled` false (Standby) means no request at all.
  */
 export function useServiceStatus(enabled: boolean, api: FitAiApi = createApi()): ServiceStatus {
   const [status, setStatus] = useState<ServiceStatus>(INITIAL_STATUS)
@@ -35,15 +43,19 @@ export function useServiceStatus(enabled: boolean, api: FitAiApi = createApi()):
       try {
         await api.health()
       } catch {
-        if (!stopped) setStatus({ ...INITIAL_STATUS, core: 'offline', octave: 'no_core' })
+        if (!stopped) setStatus({ core: 'offline', octave: 'no_core', simulated: null, ollama: 'unverified' })
         return
       }
-      try {
-        const s = await api.status()
+      // the two checks are independent: a failure of one must not hide the other
+      const [vehicle, llm] = await Promise.allSettled([api.status(), api.llmStatus()])
+      const ollama: ServiceStatus['ollama'] = llm.status === 'fulfilled' ? toLlmState(llm.value?.state) : 'unverified'
+      if (stopped) return
+      if (vehicle.status === 'fulfilled') {
+        const s = vehicle.value
         const octave: OctaveLink = s.state === 'connected' ? 'connected' : s.state === 'vehicle_link_down' ? 'vehicle_link_down' : 'unavailable'
-        if (!stopped) setStatus({ core: 'online', octave, simulated: s.simulated, ollama: 'unverified' })
-      } catch {
-        if (!stopped) setStatus({ core: 'online', octave: 'unavailable', simulated: null, ollama: 'unverified' })
+        setStatus({ core: 'online', octave, simulated: s.simulated, ollama })
+      } else {
+        setStatus({ core: 'online', octave: 'unavailable', simulated: null, ollama })
       }
     }
     void run()

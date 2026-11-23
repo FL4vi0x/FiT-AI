@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ChatRequest, ChatResponse, HealthResponse, StatusResponse, TelemetryResponse } from './types'
+import type { ApiErrorBody, ChatRequest, ChatResponse, HealthResponse, LlmStatusResponse, StatusResponse, TelemetryResponse } from './types'
 
 /** The server answered with an error (4xx/5xx). `code` is the stable backend code, never free text from the user. */
 export class ApiError extends Error {
@@ -30,6 +30,7 @@ export interface FitAiApi {
   health(): Promise<HealthResponse>
   status(): Promise<StatusResponse>
   telemetry(): Promise<TelemetryResponse>
+  llmStatus(): Promise<LlmStatusResponse>
   chat(req: ChatRequest): Promise<ChatResponse>
 }
 
@@ -102,6 +103,7 @@ export function createApi(opts: ApiOptions = {}): FitAiApi {
     health: () => request<HealthResponse>('/health', { method: 'GET' }, timeoutMs),
     status: () => request<StatusResponse>('/api/v1/vehicle/status', { method: 'GET' }, timeoutMs),
     telemetry: () => request<TelemetryResponse>('/api/v1/vehicle/telemetry', { method: 'GET' }, timeoutMs),
+    llmStatus: () => request<LlmStatusResponse>('/api/v1/llm/status', { method: 'GET' }, timeoutMs),
     chat: (req) =>
       request<ChatResponse>(
         '/api/v1/chat',

@@ -4,6 +4,7 @@ import { identityExit } from '../motion/activeVariants'
 import { usePrefersReducedMotion } from '../motion/useReducedMotion'
 import { isOnStage, useVisualState, VISUAL_STATES, type FitAIVisualState } from '../state/visualState'
 import { useServiceStatus } from '../state/useServiceStatus'
+import { useTelemetry } from '../state/useTelemetry'
 import ActiveScreen from './ActiveScreen/ActiveScreen'
 import StandbyScreen from './StandbyScreen/StandbyScreen'
 import activeStyles from './ActiveScreen/ActiveScreen.module.css'
@@ -20,6 +21,7 @@ export default function Experience({ initial = 'standby', demo = false }: { init
   const onStage = isOnStage(state)
   const [standbyGone, setStandbyGone] = useState(initial !== 'standby')
   const services = useServiceStatus(onStage)
+  const telemetry = useTelemetry(onStage) // read-only GET of the vehicle readings, only while the active screen is on stage
 
   // the real link decides `unavailable`; the demo can force any state
   const shown: FitAIVisualState = state === 'active' && services.core === 'offline' ? 'unavailable' : state
@@ -27,7 +29,7 @@ export default function Experience({ initial = 'standby', demo = false }: { init
   const showStandby = !standbyGone || !onStage
   return (
     <>
-      {onStage && <ActiveScreen state={shown} services={services} />}
+      {onStage && <ActiveScreen state={shown} services={services} telemetry={telemetry} />}
       {showStandby && (
         <motion.div
           className={styles.standby}

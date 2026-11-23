@@ -12,12 +12,21 @@ export const NAV = [
   { id: 'settings', label: 'Configurações', icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2' },
 ] as const
 
-const OCTAVE_LABEL: Record<ServiceStatus['octave'], { text: string; tone: 'ok' | 'warn' | 'off' | 'wait' }> = {
+export const OCTAVE_LABEL: Record<ServiceStatus['octave'], { text: string; tone: 'ok' | 'warn' | 'off' | 'wait' }> = {
   checking: { text: 'Verificando', tone: 'wait' },
   connected: { text: 'Conectado', tone: 'ok' },
   vehicle_link_down: { text: 'Sem veículo', tone: 'warn' },
   unavailable: { text: 'Indisponível', tone: 'off' },
   no_core: { text: 'Sem Core', tone: 'off' },
+}
+
+const OLLAMA_LABEL: Record<ServiceStatus['ollama'], { text: string; tone: 'ok' | 'warn' | 'off' | 'wait' }> = {
+  checking: { text: 'Verificando', tone: 'wait' },
+  available: { text: 'Disponível', tone: 'ok' },
+  model_not_installed: { text: 'Modelo ausente', tone: 'warn' },
+  unavailable: { text: 'Desligado', tone: 'off' },
+  unverified: { text: 'Não verificado', tone: 'wait' },
+  not_configured: { text: 'Sem modelo', tone: 'wait' },
 }
 
 export function systemLine(s: ServiceStatus): string {
@@ -43,10 +52,11 @@ function Chip({ name, text, tone, id }: { name: string; text: string; tone: stri
 
 /**
  * The top bar. Only Home exists; the other sections are shown disabled (and say "em breve" to assistive technology): there is no
- * fake navigation. The service chips show real checks, never an invented "online".
+ * fake navigation. The service chips show real checks (OCTAVE from /vehicle/status, Ollama from /llm/status), never an invented "online".
  */
 export function ActiveHeader({ services, now }: { services: ServiceStatus; now: number }) {
   const o = OCTAVE_LABEL[services.octave]
+  const l = OLLAMA_LABEL[services.ollama]
   return (
     <motion.header className={styles.header} variants={headerVariants} data-testid="active-header">
       <div className={styles.brand}>
@@ -77,7 +87,7 @@ export function ActiveHeader({ services, now }: { services: ServiceStatus; now: 
         })}
       </nav>
       <div className={styles.right}>
-        <Chip id="chip-ollama" name="Ollama" text="Não verificado" tone="wait" />
+        <Chip id="chip-ollama" name="Ollama" text={l.text} tone={l.tone} />
         <Chip id="chip-octave" name="OCTAVE" text={o.text} tone={o.tone} />
         <time className={styles.clock} dateTime={new Date(now).toISOString()}>
           <strong>{fmtTime(now)}</strong>

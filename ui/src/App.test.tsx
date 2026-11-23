@@ -31,6 +31,7 @@ function fakeApi(over: Partial<FitAiApi> = {}): FitAiApi {
     health: vi.fn(async () => ({ status: 'ok', service: 'fit-ai-core', version: '0.1.0' })),
     status: vi.fn(async () => status),
     telemetry: vi.fn(async () => reading()),
+    llmStatus: vi.fn(async () => ({ state: 'available' as const, model: 'm:t', checked_at: new Date().toISOString() })),
     chat: vi.fn(async () => answer()),
     ...over,
   }

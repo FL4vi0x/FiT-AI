@@ -23,6 +23,9 @@ function mockMatchMedia(reduced: boolean) {
   })) as unknown as typeof window.matchMedia
 }
 
+// the only things the active screen may ask the Core for on its own: four read-only GETs. NEVER the chat.
+const READ_ONLY = ['/health', '/api/v1/vehicle/status', '/api/v1/llm/status', '/api/v1/vehicle/telemetry']
+
 const online: ServiceStatus = { core: 'online', octave: 'connected', simulated: true, ollama: 'unverified' }
 const offline: ServiceStatus = { core: 'offline', octave: 'no_core', simulated: null, ollama: 'unverified' }
 
@@ -170,6 +173,7 @@ describe('useServiceStatus', () => {
     health: vi.fn().mockResolvedValue({ status: 'ok', service: 'fit-ai', version: '0' }),
     status: vi.fn().mockResolvedValue({ available: true, state: 'connected', source: 'octave', simulated: true, protocol_version: 3, octave_version: '0.9.6', detail: null }),
     telemetry: vi.fn(),
+    llmStatus: vi.fn().mockResolvedValue({ state: 'available', model: 'm:t', checked_at: '2026-11-23T00:00:00Z' }),
     chat: vi.fn(),
     ...over,
   })
@@ -185,7 +189,7 @@ describe('useServiceStatus', () => {
     const a = api()
     const { result } = renderHook(() => useServiceStatus(true, a))
     await waitFor(() => expect(result.current.octave).toBe('connected'))
-    expect(result.current).toMatchObject({ core: 'online', simulated: true, ollama: 'unverified' })
+    expect(result.current).toMatchObject({ core: 'online', simulated: true, ollama: 'available' })
     expect(a.telemetry).not.toHaveBeenCalled()
     expect(a.chat).not.toHaveBeenCalled()
   })
@@ -203,7 +207,7 @@ describe('useServiceStatus', () => {
     const { result } = renderHook(() => useServiceStatus(true, a))
     await waitFor(() => expect(result.current.octave).toBe('unavailable'))
     expect(result.current.core).toBe('online')
-    expect(INITIAL_STATUS.ollama).toBe('unverified')
+    expect(INITIAL_STATUS.ollama).toBe('checking')
   })
 })
 
@@ -231,14 +235,15 @@ describe('Experience (Standby -> Active)', () => {
     expect(fetched).toHaveLength(0)
   })
 
-  it('the wake control starts the activation; the active screen checks only /health and /vehicle/status', async () => {
+  it('the wake control starts the activation; the active screen makes only read-only GETs and never the chat', async () => {
     const user = userEvent.setup()
     render(<Experience />)
     await user.click(screen.getByTestId('wake'))
     expect(await screen.findByTestId('active-screen')).toHaveAttribute('data-state', 'activating')
     await waitFor(() => expect(fetched.length).toBeGreaterThanOrEqual(2))
-    expect(fetched.every((u) => u.endsWith('/health') || u.endsWith('/api/v1/vehicle/status'))).toBe(true)
-    expect(fetched.some((u) => u.includes('chat') || u.includes('telemetry'))).toBe(false)
+    expect(fetched.every((u) => READ_ONLY.some((p) => u.endsWith(p)))).toBe(true)
+    expect(fetched.some((u) => u.includes('chat'))).toBe(false)
+    expect(fetched.some((u) => u.endsWith('/api/v1/vehicle/telemetry'))).toBe(true) // the readout asks for the readings, read-only
     await waitFor(() => expect(screen.getByTestId('active-screen')).toHaveAttribute('data-state', 'active'), { timeout: 5000 })
   })
 
@@ -278,5 +283,75 @@ describe('Root routing', () => {
     window.location.hash = '#/active'
     render(<Root />)
     expect(await screen.findByTestId('active-screen')).toBeInTheDocument()
+  })
+})
+
+
+describe('the Ollama chip shows the real state', () => {
+  beforeEach(() => mockMatchMedia(false))
+
+  it.each([
+    ['available', 'Disponível'],
+    ['model_not_installed', 'Modelo ausente'],
+    ['unavailable', 'Desligado'],
+    ['unverified', 'Não verificado'],
+    ['not_configured', 'Sem modelo'],
+    ['checking', 'Verificando'],
+  ] as const)('%s -> "%s"', (ollama, text) => {
+    render(<ActiveHeader services={{ ...online, ollama }} now={0} />)
+    expect(screen.getByTestId('chip-ollama')).toHaveTextContent(text)
+  })
+
+  it('is never "Disponível" unless the Core said so', () => {
+    for (const ollama of ['unverified', 'unavailable', 'checking', 'not_configured', 'model_not_installed'] as const) {
+      const { unmount } = render(<ActiveHeader services={{ ...online, ollama }} now={0} />)
+      expect(screen.getByTestId('chip-ollama')).not.toHaveTextContent('Disponível')
+      unmount()
+    }
+  })
+})
+
+describe('useServiceStatus and the language-model check', () => {
+  const base = (llm: unknown): FitAiApi => ({
+    health: vi.fn().mockResolvedValue({ status: 'ok', service: 'fit-ai', version: '0' }),
+    status: vi.fn().mockResolvedValue({ available: true, state: 'connected', source: 'octave', simulated: true, protocol_version: 3, octave_version: '0.9.6', detail: null }),
+    telemetry: vi.fn(),
+    llmStatus: llm as FitAiApi['llmStatus'],
+    chat: vi.fn(),
+  })
+
+  it('reports each state the Core sends', async () => {
+    for (const state of ['available', 'model_not_installed', 'unavailable', 'unverified', 'not_configured'] as const) {
+      const { result, unmount } = renderHook(() => useServiceStatus(true, base(vi.fn().mockResolvedValue({ state, model: 'm:t', checked_at: 'x' }))))
+      await waitFor(() => expect(result.current.octave).toBe('connected'))
+      expect(result.current.ollama).toBe(state)
+      unmount()
+    }
+  })
+
+  it('an unknown state, a malformed body or a failing endpoint is "unverified", and the vehicle link still shows', async () => {
+    for (const llm of [vi.fn().mockResolvedValue({ state: 'connected' }), vi.fn().mockResolvedValue({}), vi.fn().mockResolvedValue(null), vi.fn().mockRejectedValue(new Error('404'))]) {
+      const { result, unmount } = renderHook(() => useServiceStatus(true, base(llm)))
+      await waitFor(() => expect(result.current.octave).toBe('connected'))
+      expect(result.current.ollama).toBe('unverified')
+      unmount()
+    }
+  })
+
+  it('Core down -> Ollama "unverified" (not asked), never "available"', async () => {
+    const a = base(vi.fn())
+    a.health = vi.fn().mockRejectedValue(new Error('down'))
+    const { result } = renderHook(() => useServiceStatus(true, a))
+    await waitFor(() => expect(result.current.core).toBe('offline'))
+    expect(result.current.ollama).toBe('unverified')
+    expect(a.llmStatus).not.toHaveBeenCalled()
+  })
+
+  it('never calls chat or telemetry', async () => {
+    const a = base(vi.fn().mockResolvedValue({ state: 'available', model: 'm:t', checked_at: 'x' }))
+    const { result } = renderHook(() => useServiceStatus(true, a))
+    await waitFor(() => expect(result.current.ollama).toBe('available'))
+    expect(a.chat).not.toHaveBeenCalled()
+    expect(a.telemetry).not.toHaveBeenCalled()
   })
 })
