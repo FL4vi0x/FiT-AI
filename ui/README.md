@@ -51,12 +51,19 @@ Sem isso, a UI mostra o erro `origin_not_allowed` com essa instrução (a GET co
 | `npm run build` | `tsc --noEmit` + build de produção em `dist/` (com CSP restrita) |
 | `npm run preview` | serve o build em `127.0.0.1:4173` |
 | `npm run typecheck` | TypeScript estrito |
-| `npm test` | 81 testes (API, estado, componentes, App com API falsa) |
+| `npm test` | testes de API, estado, componentes, voz (áudio, captura, máquina de estados) e App com API falsa |
 | `npm run e2e` | roteiro no **Edge headless** contra o build e um Core simulado (14 passos; capturas em `e2e/out/`) |
 | `npm run e2e:real` | o build contra a **stack real** (OCTAVE + Core + Ollama; `-- --no-llm` pula o chat) |
 | `node e2e/perf.mjs` | custo de renderização por estado |
 
 `FIT_AI_CORE_URL` (padrão `http://127.0.0.1:8000`) muda o destino do proxy; só endereços de loopback são aceitos.
+
+## Voz (P9.1): push-to-talk local
+
+Na tela Active, o **núcleo circular** é o controle de voz: segure (mouse, toque, Espaço ou Enter), fale e solte; um toque rápido inicia e o próximo toque para; Esc cancela.
+O microfone só abre por esse gesto, é liberado ao soltar e nunca é usado no Standby. O áudio vai só ao Core local (`/api/v1/voice/transcribe`) e o texto reconhecido aparece
+apenas no modo de desenvolvimento (`npm run dev`); ele **não** é enviado ao chat. Precisa do motor e do modelo locais: veja `../docs/poc-09-01-local-stt.md`.
+Teste com navegador (dispositivo de captura **falso**, voz sintética): `FIT_E2E_SPEECH_WAV=<wav> node e2e/voice.mjs`.
 
 ## Estrutura
 

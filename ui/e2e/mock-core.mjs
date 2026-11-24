@@ -92,6 +92,9 @@ export function startMockCore({ port = 8010 } = {}) {
     if (url.pathname === '/api/v1/llm/status') {
       return send(res, 200, { state: cfg.llm.state, model: 'qwen3:4b-instruct-2507-q4_K_M', checked_at: new Date().toISOString() })
     }
+    if (url.pathname === '/api/v1/voice/status') {
+      return send(res, 200, { state: 'available', language: 'pt', max_audio_s: 30, sample_rate: 16000, hint: null })
+    }
     if (url.pathname === '/api/v1/vehicle/status') {
       await sleep(cfg.latency.status)
       return send(res, 200, cfg.status)

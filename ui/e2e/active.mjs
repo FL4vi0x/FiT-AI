@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { startMockCore } from './mock-core.mjs'
 
-// P8.3: the Active screen reads Core health, OCTAVE status, real telemetry and the Ollama status. All GET, none starts anything. Chat stays forbidden.
-const READ_ONLY = new Set(['/health', '/api/v1/vehicle/status', '/api/v1/vehicle/telemetry', '/api/v1/llm/status'])
+// P8.3/P9.1: the Active screen reads Core health, OCTAVE status, real telemetry, the Ollama status and the speech availability. All GET, none starts anything. Chat stays forbidden.
+const READ_ONLY = new Set(['/health', '/api/v1/vehicle/status', '/api/v1/vehicle/telemetry', '/api/v1/llm/status', '/api/v1/voice/status'])
 const here = path.dirname(fileURLToPath(import.meta.url))
 const uiDir = path.resolve(here, '..')
 const out = path.join(here, 'out', 'active')
