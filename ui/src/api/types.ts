@@ -38,6 +38,26 @@ export interface LlmStatusResponse {
   checked_at: string // ISO 8601
 }
 
+/** Local speech recognition (P9.1). `unavailable` is the UI's own word for "the Core has no speech service". */
+export type VoiceState = 'available' | 'disabled' | 'model_missing' | 'engine_missing' | 'unavailable'
+
+export interface VoiceStatusResponse {
+  state: VoiceState
+  language: string | null
+  max_audio_s: number | null
+  sample_rate: number | null
+  hint: string | null
+}
+
+export interface TranscribeResponse {
+  text: string
+  silent: boolean // nothing loud enough was captured: the engine did not run
+  duration_s: number
+  processing_ms: number
+  language: string
+  model: string
+}
+
 export type AnswerOrigin = 'llm' | 'llm_retry' | 'fallback' | 'deterministic' | 'policy_refusal' | 'memory_command'
 export type Availability = 'not_requested' | 'ok' | 'partial' | 'stale' | 'unavailable'
 export type ModelStatus = 'ok' | 'unavailable' | 'timeout' | 'not_found' | 'error' | 'not_used'

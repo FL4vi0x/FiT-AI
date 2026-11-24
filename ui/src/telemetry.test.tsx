@@ -92,7 +92,7 @@ describe('TelemetryReadout', () => {
 })
 
 describe('useTelemetry', () => {
-  const apiFor = (telemetry: FitAiApi['telemetry']): FitAiApi => ({ health: vi.fn(), status: vi.fn(), llmStatus: vi.fn(), chat: vi.fn(), telemetry })
+  const apiFor = (telemetry: FitAiApi['telemetry']): FitAiApi => ({ health: vi.fn(), status: vi.fn(), llmStatus: vi.fn(), chat: vi.fn(), voiceStatus: vi.fn(), transcribe: vi.fn(), telemetry })
 
   it('asks nothing while disabled', () => {
     const a = apiFor(vi.fn())

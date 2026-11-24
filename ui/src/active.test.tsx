@@ -24,7 +24,7 @@ function mockMatchMedia(reduced: boolean) {
 }
 
 // the only things the active screen may ask the Core for on its own: four read-only GETs. NEVER the chat.
-const READ_ONLY = ['/health', '/api/v1/vehicle/status', '/api/v1/llm/status', '/api/v1/vehicle/telemetry']
+const READ_ONLY = ['/health', '/api/v1/vehicle/status', '/api/v1/llm/status', '/api/v1/vehicle/telemetry', '/api/v1/voice/status']
 
 const online: ServiceStatus = { core: 'online', octave: 'connected', simulated: true, ollama: 'unverified' }
 const offline: ServiceStatus = { core: 'offline', octave: 'no_core', simulated: null, ollama: 'unverified' }
@@ -174,6 +174,8 @@ describe('useServiceStatus', () => {
     status: vi.fn().mockResolvedValue({ available: true, state: 'connected', source: 'octave', simulated: true, protocol_version: 3, octave_version: '0.9.6', detail: null }),
     telemetry: vi.fn(),
     llmStatus: vi.fn().mockResolvedValue({ state: 'available', model: 'm:t', checked_at: '2026-11-23T00:00:00Z' }),
+    voiceStatus: vi.fn().mockResolvedValue({ state: 'available', language: 'pt', max_audio_s: 30, sample_rate: 16000, hint: null }),
+    transcribe: vi.fn(),
     chat: vi.fn(),
     ...over,
   })
@@ -317,6 +319,8 @@ describe('useServiceStatus and the language-model check', () => {
     status: vi.fn().mockResolvedValue({ available: true, state: 'connected', source: 'octave', simulated: true, protocol_version: 3, octave_version: '0.9.6', detail: null }),
     telemetry: vi.fn(),
     llmStatus: llm as FitAiApi['llmStatus'],
+    voiceStatus: vi.fn().mockResolvedValue({ state: 'available', language: 'pt', max_audio_s: 30, sample_rate: 16000, hint: null }),
+    transcribe: vi.fn(),
     chat: vi.fn(),
   })
 

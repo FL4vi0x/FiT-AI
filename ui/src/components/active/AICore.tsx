@@ -1,4 +1,6 @@
 import { motion } from 'motion/react'
+import { useEffect, useRef } from 'react'
+import type { LevelMeter } from '../../voice/levels'
 import { coreVariants } from '../../motion/activeVariants'
 import { Bars } from './Bars'
 import styles from '../../screens/ActiveScreen/ActiveScreen.module.css'
@@ -15,8 +17,24 @@ const arc = (r: number, a0: number, a1: number) => {
 
 const TICKS = Array.from({ length: 60 }, (_, i) => i * 6)
 
-/** The AI core above the car: segmented outer ring, luminous inner ring, radial ticks and a small waveform. It is independent of the 3D scene. */
-export function AICore() {
+/** The AI core above the car: segmented outer ring, luminous inner ring, radial ticks and a small waveform. It is independent of the 3D scene.
+ * While `live` (the microphone is really on) it also glows with the captured level; otherwise the glow is off, never faked. */
+export function AICore({ meter, live = false }: { meter?: LevelMeter; live?: boolean }) {
+  const glow = useRef<SVGCircleElement>(null)
+  useEffect(() => {
+    const el = glow.current
+    if (!live || !meter || !el) return
+    let frame = 0
+    const paint = () => {
+      frame = requestAnimationFrame(paint)
+      el.style.opacity = (0.3 + 0.7 * meter.current()).toFixed(3) // a steady glow while open, brighter with the voice
+    }
+    frame = requestAnimationFrame(paint)
+    return () => {
+      cancelAnimationFrame(frame)
+      el.style.opacity = ''
+    }
+  }, [live, meter])
   return (
     <motion.div className={styles.core} variants={coreVariants} data-testid="ai-core" aria-hidden="true">
       <svg className={styles.coreSvg} viewBox="0 0 1672 941">
@@ -25,8 +43,13 @@ export function AICore() {
             <stop offset="0" stopColor="#FF8500" stopOpacity="0.16" />
             <stop offset="1" stopColor="#FF8500" stopOpacity="0" />
           </radialGradient>
+          <radialGradient id="core-listen" cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0.55" stopColor="#FFB04A" stopOpacity="0.55" />
+            <stop offset="1" stopColor="#FF8500" stopOpacity="0" />
+          </radialGradient>
         </defs>
         <circle cx={CX} cy={CY} r={250} fill="url(#core-haze)" />
+        <circle ref={glow} className={styles.coreListenGlow} cx={CX} cy={CY} r={190} fill="url(#core-listen)" />
         {[175, 205, 235].map((r, i) => (
           <circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke="#FF8500" strokeWidth="1" opacity={0.2 - i * 0.05} />
         ))}
@@ -53,7 +76,7 @@ export function AICore() {
         <circle cx={CX} cy={CY} r={102} fill="none" stroke="#FFB04A" strokeWidth="1.2" opacity="0.7" />
         <line x1={CX - 88} y1={CY} x2={CX + 88} y2={CY} stroke="#FF8500" strokeWidth="1.2" opacity="0.7" />
       </svg>
-      <Bars count={37} sigma={0.32} className={styles.coreBars} />
+      <Bars count={37} sigma={0.32} className={styles.coreBars} meter={meter} live={live} />
     </motion.div>
   )
 }

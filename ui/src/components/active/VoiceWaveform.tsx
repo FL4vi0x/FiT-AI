@@ -1,10 +1,11 @@
 import { motion } from 'motion/react'
 import { waveformVariants } from '../../motion/activeVariants'
+import type { LevelMeter } from '../../voice/levels'
 import { Bars } from './Bars'
 import styles from '../../screens/ActiveScreen/ActiveScreen.module.css'
 
-/** The bottom waveform with its two side arcs. Purely visual: it does not capture or play any audio. */
-export function VoiceWaveform() {
+/** The bottom waveform with its two side arcs. It never captures or plays audio itself: while `live` it DRAWS the level it is given. */
+export function VoiceWaveform({ meter, live = false }: { meter?: LevelMeter; live?: boolean }) {
   return (
     <motion.div className={styles.voice} variants={waveformVariants} data-testid="voice-waveform" aria-hidden="true">
       <svg className={styles.voiceArcs} viewBox="0 0 600 120" preserveAspectRatio="none">
@@ -14,7 +15,7 @@ export function VoiceWaveform() {
         <path d="M 562 8 Q 596 60 562 112" fill="none" stroke="#FF8500" strokeWidth="9" opacity="0.15" strokeLinecap="round" />
         <line x1="60" y1="60" x2="540" y2="60" stroke="#FF8500" strokeWidth="1" opacity="0.5" />
       </svg>
-      <Bars count={61} sigma={0.3} className={styles.voiceBars} />
+      <Bars count={61} sigma={0.3} className={styles.voiceBars} meter={meter} live={live} />
     </motion.div>
   )
 }
