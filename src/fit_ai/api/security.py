@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 
 ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
@@ -106,6 +106,14 @@ async def _reply(send, status: int, code: str, message: str, request_id: str | N
     await send({"type": "http.response.body", "body": body})
 
 
+AUDIO_CONTENT_TYPES = frozenset({"audio/wav", "audio/x-wav"})
+
+
+def _is_audio_content_type(raw: bytes | None) -> bool:
+    """Exactly a WAV media type, no parameters: anything else (text/plain, forms, video, octet-stream) is refused."""
+    return raw is not None and raw.decode("latin-1").strip().lower() in AUDIO_CONTENT_TYPES
+
+
 def _is_json_content_type(raw: bytes | None) -> bool:
     if raw is None:
         return False
@@ -125,15 +133,18 @@ class BrowserGuard:
     - `Content-Type` must be exactly application/json (UTF-8): the "simple" types a page can send without a
       CORS preflight (text/plain, forms) are refused.
     - Body size is limited by Content-Length and again while streaming (chunked uploads).
+    - `audio_paths` (P9.1) maps a route to its own policy: Content-Type must be exactly audio/wav and the body is capped at that
+      route's byte limit (the chat's 16 KB would be far too small for a few seconds of speech, and its JSON rule would refuse audio).
     No CORS header is ever emitted and preflights are not answered, so a cross-origin JSON request never starts.
     """
 
     def __init__(self, app, allowed_origins: Collection[str] = (), max_body_bytes: int = 16 * 1024,
-                 body_paths: Collection[str] = ("/api/v1/chat",)):
+                 body_paths: Collection[str] = ("/api/v1/chat",), audio_paths: Mapping[str, int] | None = None):
         self.app = app
         self.allowed_origins = frozenset(o.rstrip("/").lower() for o in allowed_origins)
         self.max_body_bytes = max_body_bytes
         self.body_paths = frozenset(body_paths)  # routes that take a JSON body: Content-Type and size are enforced
+        self.audio_paths = dict(audio_paths or {})  # routes that take a WAV body: path -> maximum body bytes
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope["method"] not in UNSAFE_METHODS:
@@ -158,13 +169,20 @@ class BrowserGuard:
                 await _reply(send, 403, "cross_site_request", "Cross-site requests are not allowed.", rid)
                 return
 
-        if scope["path"] not in self.body_paths or scope["method"] != "POST":
-            # read-only routes, and other methods on the chat route: the router's own 405
+        path = scope["path"]
+        audio = path in self.audio_paths
+        if (path not in self.body_paths and not audio) or scope["method"] != "POST":
+            # read-only routes, and other methods on the guarded routes: the router's own 405
             await self.app(scope, receive, send)
             return
+        limit = self.audio_paths[path] if audio else self.max_body_bytes
 
         ctype = headers.get(b"content-type", [])
-        if len(ctype) != 1 or not _is_json_content_type(ctype[0]):
+        if audio:
+            if len(ctype) != 1 or not _is_audio_content_type(ctype[0]):
+                await _reply(send, 415, "unsupported_media_type", "Content-Type must be audio/wav.", rid)
+                return
+        elif len(ctype) != 1 or not _is_json_content_type(ctype[0]):
             await _reply(send, 415, "unsupported_media_type", "Content-Type must be application/json (UTF-8).", rid)
             return
         lengths = headers.get(b"content-length", [])
@@ -176,7 +194,7 @@ class BrowserGuard:
             if declared < 0 or len(lengths) != 1:
                 await _reply(send, 400, "invalid_content_length", "Content-Length is not valid.", rid)
                 return
-            if declared > self.max_body_bytes:
+            if declared > limit:
                 await _reply(send, 413, "payload_too_large", "The request body is too large.", rid)
                 return
 
@@ -188,7 +206,7 @@ class BrowserGuard:
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
-                if received > self.max_body_bytes:
+                if received > limit:
                     raise _BodyTooLarge
             return message
 

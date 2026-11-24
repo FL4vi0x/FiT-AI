@@ -131,6 +131,8 @@ def test_exposed_surface_is_exactly_the_reviewed_one():
         ("/api/v1/vehicle/status", "GET"),
         ("/api/v1/llm/status", "GET"),  # P8.3: read-only availability of the language-model server; no input, no model load
         ("/api/v1/chat", "POST"),  # P7: the only state-changing route; guarded by BrowserGuard + HostGuard
+        ("/api/v1/voice/status", "GET"),  # P9.1: read-only availability of local speech recognition; never opens a microphone nor loads a model
+        ("/api/v1/voice/transcribe", "POST"),  # P9.1: audio/wav body, own size/type policy in BrowserGuard, nothing stored
     }
     # framework-provided documentation routes (read-only, no data); anything else registered directly is a surprise
     direct = {r.path for r in app.routes if hasattr(r, "methods")}
